@@ -9,6 +9,7 @@ out/
 .data/
 .screenshots/
 outputs/
+products/
 .bkit-memory.json
 skills/.system/
 

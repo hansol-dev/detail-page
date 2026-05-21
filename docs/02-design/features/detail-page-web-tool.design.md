@@ -304,8 +304,8 @@ docs/01-plan/features/
 docs/02-design/features/
 docs/03-analysis/
 docs/04-report/
-outputs/*/plan/*.md
-products/*/facts.md
+DB ApprovalMarkdownVersion
+DB ProductDraft
 user-memory/{userId}/**/*.md
 ```
 
@@ -513,8 +513,8 @@ Each cut card:
 
 ```text
 users/{userId}/brands/{brandId}/logo/{assetId}.{ext}
-users/{userId}/products/{productDraftId}/photos/{assetId}.{ext}
-users/{userId}/products/{productDraftId}/generated/{jobId}/cut-{NN}.{ext}
+users/{userId}/detail-pages/{productDraftId}/photos/{assetId}.{ext}
+users/{userId}/detail-pages/{productDraftId}/generated/{jobId}/cut-{NN}.{ext}
 ```
 
 ### 9.2 Database vs File
@@ -618,4 +618,3 @@ If available later:
 | Approval MD storage | DB versioned text |
 | Legacy local files exposure | admin/dev only |
 | Image generation provider | adapter로 추상화하고 provider는 구현 단계에서 결정 |
-

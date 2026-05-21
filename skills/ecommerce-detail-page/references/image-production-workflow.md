@@ -54,18 +54,14 @@ Requirements:
 - Include a `전체 다운로드` button that triggers all image downloads.
 - Include a simple QA status area for each cut: `통과`, `재생성 필요`, or `확인 필요`.
 
-Use the helper script:
+For the web tool, review and download are handled by `/detail-pages/[id]/review`.
 
-```bash
-node ecommerce-detail-page/scripts/build-image-gallery.mjs <image-dir> <output-html>
-```
+The review page must show:
 
-Example:
+- product thumbnail when one exists
+- generated cuts in order
+- per-cut download
+- full-detail preview
+- cut-specific revision controls
 
-```bash
-node ecommerce-detail-page/scripts/build-image-gallery.mjs \
-  /Users/firstandre/.codex/generated_images/019e... \
-  /Users/firstandre/dev_test_file/detail_page_codex_skill/generated/lipstick/index.html
-```
-
-Browser note: some browsers may ask permission before downloading multiple files. Per-cut links must remain visible as fallback.
+Do not require a separate generated HTML gallery file for the web app.

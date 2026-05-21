@@ -7,7 +7,6 @@
     "dev": "next dev -p 4174",
     "build": "next build",
     "start": "next start -p 4174",
-    "legacy:start": "node server/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

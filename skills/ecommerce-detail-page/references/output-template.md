@@ -1,24 +1,14 @@
 # Output Template
 
-Use this structure for project-local ecommerce detail page work.
+Use this structure for the web-based ecommerce detail page tool.
 
-## Project-local MD First + Result Revision JSON Rule
+## Web Approval MD First Rule
 
-Initial planning must produce only a Markdown approval draft:
+Initial planning must produce only a Markdown approval draft stored as an `ApprovalMarkdownVersion` record.
 
-```text
-outputs/{product}/plan/{product}.detail-page.md
-```
+The user reviews and revises the Markdown draft in the web approval screen. Do not create a product JSON file during the initial plan/approval phase.
 
-The user reviews and revises the Markdown file. Do not create a product JSON file during the initial plan/approval phase.
-
-Create JSON only after the detail-page images have been produced. That JSON is a result-revision file for editing already generated outputs:
-
-```text
-outputs/{product}/revision/{product}.revision.json
-```
-
-The revision JSON describes produced cut image paths, approved copy, QA issues, and requested changes. It is not the source for the first draft.
+Generated images are stored as assets and connected to an `ImageGenerationJob` and `GeneratedCut` records. The database records, not an `outputs/` folder, are the source of truth for review and revision.
 
 ## Cut Count Policy
 
@@ -27,7 +17,7 @@ The revision JSON describes produced cut image paths, approved copy, QA issues, 
 - Default recommendation for a normal product detail page is 6 cuts.
 - Write `recommendedCount` in the Markdown draft.
 - If the user asks to change the cut count before production, regenerate the Markdown cut plan before image production.
-- After production, record the produced cut count in the revision JSON.
+- After production, record the produced cut count in the image generation job and generated cut records.
 
 ## Approval Rule
 
@@ -110,27 +100,16 @@ B. 수정 - 이 MD 기준으로 요청사항 반영 후 MD 갱신
 C. 중단 - 이미지 제작하지 않음
 ```
 
-## Post-production Revision JSON
+## Post-production Revision Records
 
-Top-level keys:
+After production, revision state is stored in the web app data model:
 
-- `schemaVersion`
-- `product`
-- `sourceApprovalMd`
-- `producedAt`
-- `cuts`
-- `revisionRequests`
-- `qa`
+- `ImageGenerationJob`: one image generation run.
+- `GeneratedCut`: one produced cut image and its approval/revision status.
+- `Asset`: generated image or thumbnail file.
+- `ApprovalMarkdownVersion`: approved source Markdown for the run.
 
-Cut keys:
-
-- `id`
-- `name`
-- `imagePath`
-- `approvedHeadline`
-- `approvedSubcopy`
-- `status`
-- `revisionRequest`
+Do not require a separate revision JSON file for the web tool.
 
 ## ASCII Layout Rule
 
@@ -148,4 +127,3 @@ When the user chooses image generation, convert the approved Markdown cut plan i
 - Use mobile-readable type, strong contrast, and ecommerce hierarchy.
 - If Korean text is missing, broken, unreadable, translated, or different from approved copy, regenerate before delivery unless the user explicitly asks for post-processing.
 - If product photos or verified sale facts are missing, label the output as a sales draft and avoid fabricated claims.
-

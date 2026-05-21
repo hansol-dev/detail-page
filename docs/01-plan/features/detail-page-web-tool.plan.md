@@ -156,8 +156,8 @@ MVP의 사용자는 운영자가 직접 추가한다. 사용자는 자신에게 
 | `docs/02-design/features/` | Design 문서 |
 | `docs/03-analysis/` | 분석 문서 |
 | `docs/04-report/` | 완료 보고서 |
-| `outputs/{product}/plan/*.md` | 상품별 승인용 MD |
-| `products/{product}/facts.md` | 상품별 사실 정보 |
+| DB `ApprovalMarkdownVersion` | 상품별 승인용 MD |
+| DB `ProductDraft` | 상품별 사실 정보 |
 | 사용자 메모리 MD | 사용자별 운영 메모 |
 
 ### 6.2 Exclude
