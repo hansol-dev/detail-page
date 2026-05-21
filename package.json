@@ -1,0 +1,28 @@
+{
+  "name": "detail-page-web-tool",
+  "version": "0.2.0",
+  "private": true,
+  "description": "SaaS-style ecommerce detail-page generator with brand defaults, approval Markdown, MD workspace, and generated-cut review.",
+  "scripts": {
+    "dev": "next dev -p 4174",
+    "build": "next build",
+    "start": "next start -p 4174",
+    "legacy:start": "node server/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.2",
+    "typescript": "5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

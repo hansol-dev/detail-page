@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>상세페이지 생성 도구</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">D</div>
+        <div>
+          <strong>Detail Page Tool</strong>
+          <span>PDCA 웹 작업대</span>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="주요 화면">
+        <button class="tab active" data-tab="generator" type="button">생성</button>
+        <button class="tab" data-tab="memory" type="button">메모리 MD</button>
+      </nav>
+    </aside>
+
+    <main>
+      <section class="view active" id="generator">
+        <header class="page-header">
+          <div>
+            <h1>상세페이지 초안 생성</h1>
+            <p>상품 정보, 포인트 컬러, 로고, 사진을 넣으면 상세페이지 초안과 모바일 미리보기를 만듭니다.</p>
+          </div>
+          <button id="generateBtn" class="primary" type="button">초안 생성</button>
+        </header>
+
+        <div class="workspace two-column">
+          <form id="detailForm" class="panel form-grid">
+            <label>
+              상품명
+              <input name="productName" required placeholder="예: 퀸즈트리 크런치 피넛버터">
+            </label>
+            <label>
+              브랜드
+              <input name="brand" placeholder="예: Queen's Tree">
+            </label>
+            <label>
+              카테고리
+              <select name="category">
+                <option>식품</option>
+                <option>뷰티/화장품</option>
+                <option>생활용품</option>
+                <option>패션</option>
+                <option>유아동</option>
+                <option>반려동물</option>
+                <option>기타</option>
+              </select>
+            </label>
+            <label>
+              판매 채널
+              <select name="salesChannel">
+                <option>채널 무관 모바일 상세페이지</option>
+                <option>네이버 스마트스토어</option>
+                <option>쿠팡</option>
+                <option>자사몰</option>
+                <option>인스타그램/광고 랜딩</option>
+              </select>
+            </label>
+            <label>
+              포인트 컬러
+              <input name="pointColor" type="color" value="#1f6feb">
+            </label>
+            <label>
+              컷 수
+              <select name="cutCount">
+                <option value="6">6컷 간단형</option>
+                <option value="12">12컷 기본형</option>
+                <option value="15">15컷 설명형</option>
+              </select>
+            </label>
+            <label class="wide">
+              주요 고객
+              <input name="targetCustomer" placeholder="예: 아침 식사 대용을 찾는 직장인, 건강 간식을 찾는 고객">
+            </label>
+            <label class="wide">
+              핵심 판매 포인트
+              <textarea name="sellingPoints" rows="4" placeholder="- 땅콩 100%&#10;- 크런치 식감&#10;- 500g 대용량"></textarea>
+            </label>
+            <label class="wide">
+              상품 스펙/사실 정보
+              <textarea name="facts" rows="5" placeholder="원산지, 용량, 구성, 성분, 보관 방법처럼 확인된 정보만 적어주세요."></textarea>
+            </label>
+            <label class="wide">
+              반드시 넣을 문구
+              <input name="requiredPhrases" placeholder="예: 땅콩 100%, 500g">
+            </label>
+            <label class="wide">
+              넣지 말아야 할 문구
+              <input name="forbiddenPhrases" placeholder="예: 다이어트 효과, No.1, 100% 보장">
+            </label>
+            <label>
+              로고
+              <input id="logoInput" type="file" accept="image/*">
+            </label>
+            <label>
+              상품 사진
+              <input id="photoInput" type="file" accept="image/*" multiple>
+            </label>
+            <label class="wide">
+              스타일/톤
+              <input name="style" placeholder="예: 실용 정보형, 브랜드 스토리형, 문제해결 인포그래픽형">
+            </label>
+            <label class="wide">
+              톤 메모
+              <input name="tone" placeholder="예: 깔끔하고 신뢰감 있게, 과장 없이 정보 중심">
+            </label>
+          </form>
+
+          <section class="panel result-panel">
+            <div class="panel-title">
+              <h2>생성 결과</h2>
+              <button id="copyPathBtn" type="button" disabled>경로 복사</button>
+            </div>
+            <div id="resultMeta" class="result-meta">아직 생성된 초안이 없습니다.</div>
+            <textarea id="generatedMarkdown" readonly spellcheck="false"></textarea>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="memory">
+        <header class="page-header">
+          <div>
+            <h1>메모리 MD 편집</h1>
+            <p>워크스페이스의 Markdown 파일을 웹에서 열고 수정합니다.</p>
+          </div>
+          <div class="actions">
+            <button id="refreshFilesBtn" type="button">새로고침</button>
+            <button id="saveFileBtn" class="primary" type="button" disabled>저장</button>
+          </div>
+        </header>
+
+        <div class="workspace editor-layout">
+          <section class="panel file-list-panel">
+            <input id="fileSearch" placeholder="파일 검색">
+            <div id="fileList" class="file-list"></div>
+          </section>
+          <section class="panel editor-panel">
+            <div class="panel-title">
+              <h2 id="currentFileName">파일을 선택하세요</h2>
+              <span id="saveStatus"></span>
+            </div>
+            <textarea id="fileEditor" spellcheck="false"></textarea>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
