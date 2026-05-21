@@ -20,6 +20,7 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const previewsRef = useRef<PreviewPhoto[]>([]);
   const [previews, setPreviews] = useState<PreviewPhoto[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
     previewsRef.current = previews;
@@ -38,12 +39,38 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
     inputRef.current.files = transfer.files;
   }
 
-  function removePreview(id: string) {
+  function setOrderedPreviews(updater: (current: PreviewPhoto[]) => PreviewPhoto[]) {
     setPreviews((current) => {
+      const next = updater(current);
+      syncInputFiles(next);
+      return next;
+    });
+  }
+
+  function removePreview(id: string) {
+    setOrderedPreviews((current) => {
       const removed = current.find((preview) => preview.id === id);
       if (removed) URL.revokeObjectURL(removed.url);
-      const next = current.filter((preview) => preview.id !== id);
-      syncInputFiles(next);
+      return current.filter((preview) => preview.id !== id);
+    });
+  }
+
+  function clearPreviews() {
+    setOrderedPreviews((current) => {
+      current.forEach((preview) => URL.revokeObjectURL(preview.url));
+      return [];
+    });
+  }
+
+  function movePreview(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return;
+    setOrderedPreviews((current) => {
+      const sourceIndex = current.findIndex((preview) => preview.id === sourceId);
+      const targetIndex = current.findIndex((preview) => preview.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return current;
+      const next = [...current];
+      const [source] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, source);
       return next;
     });
   }
@@ -59,39 +86,73 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
         disabled={disabled}
         onChange={(event) => {
           const files = Array.from(event.currentTarget.files ?? []);
-          setPreviews((current) => {
-            current.forEach((preview) => URL.revokeObjectURL(preview.url));
-            return files.map((file, index) => ({
-              id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+          setOrderedPreviews((current) => [
+            ...current,
+            ...files.map((file, index) => ({
+              id: `${file.name}-${file.size}-${file.lastModified}-${current.length + index}`,
               file,
               name: file.name,
               size: file.size,
               url: URL.createObjectURL(file)
-            }));
-          });
+            }))
+          ]);
+          event.currentTarget.value = "";
         }}
       />
       {previews.length ? (
-        <div className="photoPreviewGrid" aria-label="선택한 상품 사진 미리보기">
-          {previews.map((preview, index) => (
-            <figure className="photoPreviewItem" key={preview.id}>
-              <img src={preview.url} alt={`선택한 상품 사진 ${index + 1}`} />
-              <button
-                className="photoPreviewRemove"
-                type="button"
-                onClick={() => removePreview(preview.id)}
-                aria-label={`${preview.name} 삭제`}
+        <>
+          <div className="photoPreviewToolbar">
+            <span>선택된 새 사진 {previews.length}개</span>
+            <button type="button" onClick={clearPreviews} disabled={disabled}>
+              전체삭제
+            </button>
+          </div>
+          <div className="photoPreviewGrid" aria-label="선택한 상품 사진 미리보기. 드래그해서 순서를 바꿀 수 있습니다.">
+            {previews.map((preview, index) => (
+              <figure
+                className={`photoPreviewItem${draggingId === preview.id ? " dragging" : ""}`}
+                draggable={!disabled}
+                key={preview.id}
+                onDragStart={(event) => {
+                  setDraggingId(preview.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", preview.id);
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  const sourceId = draggingId ?? event.dataTransfer.getData("text/plain");
+                  if (sourceId) movePreview(sourceId, preview.id);
+                }}
+                onDragEnd={() => setDraggingId(null)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDraggingId(null);
+                }}
               >
-                ×
-              </button>
-              <figcaption>
-                <strong>{index + 1}</strong>
-                <span>{preview.name}</span>
-                <small>{formatFileSize(preview.size)}</small>
-              </figcaption>
-            </figure>
-          ))}
-        </div>
+                <img src={preview.url} alt={`선택한 상품 사진 ${index + 1}`} />
+                <button
+                  className="photoPreviewRemove"
+                  type="button"
+                  onClick={() => removePreview(preview.id)}
+                  onDragStart={(event) => event.preventDefault()}
+                  aria-label={`${preview.name} 삭제`}
+                >
+                  ×
+                </button>
+                <figcaption>
+                  <strong>{index + 1}</strong>
+                  <span>{preview.name}</span>
+                  <small>{formatFileSize(preview.size)}</small>
+                </figcaption>
+              </figure>
+            ))}
+            <p className="photoOrderHint">사진을 드래그하면 바로 순서가 바뀝니다. 이 순서대로 생성에 참고됩니다.</p>
+          </div>
+        </>
       ) : (
         <p className="muted">사진을 선택하면 여기에서 바로 미리볼 수 있습니다.</p>
       )}

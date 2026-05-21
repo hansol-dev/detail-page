@@ -291,7 +291,7 @@ export async function saveCutRevisionAction(formData: FormData) {
       : freeformRequest;
   const photoReplacementRequest =
     replaceProductPhoto && selectedProductPhotoAssetId
-      ? "PRODUCT_PHOTO_REPLACE: 선택한 상품 사진을 기준으로 이 컷의 메인 상품 이미지를 교체해줘. 기존 문구와 레이아웃은 최대한 유지해줘."
+      ? "PRODUCT_PHOTO_REFERENCE: 선택한 상품 사진을 참고해서 상품 정체성, 패키지 형태, 라벨, 옵션/맛, 색상 오류를 바로잡아줘. 사진을 그대로 붙여넣듯 쓰기보다 현재 컷 디자인에 자연스럽게 반영해줘."
       : "";
   await saveCutRevision(userId, cutId, [scopedTextRequest, photoReplacementRequest].filter(Boolean).join("\n"), {
     selectedProductPhotoAssetId: replaceProductPhoto ? selectedProductPhotoAssetId : null

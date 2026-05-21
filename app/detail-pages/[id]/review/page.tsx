@@ -189,7 +189,9 @@ export default async function ReviewPage({
                 {result.cuts.map((cut) => {
                   const asset = db.assets.find((item) => item.id === cut.imageAssetId);
                   const downloadable = downloadableCuts.find((item) => item.cutId === cut.id);
-                  const visibleQaNotes = cut.qa.notes.filter((note) => !note.includes("수정 요청"));
+                  const visibleQaNotes = cut.qa.notes.filter((note) => {
+                    return note !== "revision_applied" && !note.includes("수정 요청") && !note.includes("理쒓렐");
+                  });
 
                   return (
                     <article className="panel cutCard" key={cut.id}>

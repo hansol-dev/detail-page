@@ -105,12 +105,13 @@ function revisionReplacementGuidance(request: string | undefined) {
 function productPhotoReplacementGuidance(references: ImageReferences) {
   if (!references.productPhotoOverride) return "";
   return [
-    "MANDATORY PRODUCT PHOTO REPLACEMENT:",
+    "PRODUCT PHOTO REFERENCE ADJUSTMENT:",
     "- The user selected a specific uploaded product photo for this cut.",
-    "- Use the selected uploaded product photo as the primary source of truth for the main product image in this cut.",
-    "- Replace any wrong product image, wrong package, wrong label, wrong flavor, or wrong product form with the selected product photo reference.",
-    "- Preserve the existing cut layout, background, typography, and approved copy as much as possible.",
-    "- Do not invent a different product, package, label, ingredient, logo, option, or flavor that is not visible in the selected photo."
+    "- Use the selected photo as a visual reference to correct the product's identity, package shape, label direction, flavor/option, color, and visible product details.",
+    "- Do not copy the selected photo literally as a flat pasted image unless the existing cut composition already calls for that treatment.",
+    "- Keep the cut's designed composition, lighting, scale, background, typography, and approved copy as much as possible.",
+    "- The regenerated product should feel designed into the current detail-page cut while staying faithful to the selected reference photo.",
+    "- Do not invent a different product, package, label, ingredient, logo, option, or flavor that conflicts with the selected photo."
   ].join("\n");
 }
 
@@ -278,7 +279,7 @@ async function buildImageReferences(
 function referenceSummary(references: ImageReferences, options: { logoAllowed?: boolean } = {}) {
   return [
     references.productPhotoAsset && references.productPhotoOverride
-      ? "The selected uploaded product photo is mandatory for this cut. Use it as the primary product image reference and correct any wrong product image in the current cut."
+      ? "Use the selected uploaded product photo as a visual reference to correct product identity and visible details, while preserving the designed composition of the cut. Do not paste it literally unless appropriate."
       : references.productPhotoAsset
         ? "Use the uploaded product photo as the primary product reference. Preserve the actual product shape, color, packaging, and visible label details as much as possible."
       : "No product photo was provided; create a conservative product presentation without inventing factual claims.",
@@ -422,6 +423,7 @@ function imagePrompt(input: CutGenerationInput) {
     revisionGuidance,
     "Priority order: 1) approved cut section, 2) common operating memory, 3) common expression guide, 4) brand style.",
     "These cuts are part of one complete detail page. Avoid repeating the same visible copy, benefit, layout role, or notice concept across cuts.",
+    "Brand copy is not required on every cut. Do not add brand copy, slogans, or repeated brand headers unless the approved cut section explicitly includes them. Even when included, keep it subtle and avoid overuse.",
     "Use common operating memory as production constraints only. Do not render memory text itself as visible copy unless the approved cut section explicitly asks for that exact text.",
     "Use Korean typography-friendly composition.",
     "Korean text must be crisp and legible at mobile width. Avoid small dense paragraphs and avoid distorted glyphs.",
@@ -1033,8 +1035,13 @@ export async function saveCutRevision(
       koreanTextMatchesApprovedCopy: true,
       productMatchesReference: Boolean(references.productPhotoAsset),
       notes: [
-        ...target.qa.notes.filter((note) => !note.includes("?섏젙 ?붿껌")),
-        "理쒓렐 ?섏젙 ?붿껌??諛섏쁺???ㅼ떆 ?앹꽦?덉뒿?덈떎."
+        ...target.qa.notes.filter(
+          (note) =>
+            !note.includes("revision_applied") &&
+            !note.includes("?섏젙 ?붿껌") &&
+            !note.includes("理쒓렐 ?섏젙")
+        ),
+        "revision_applied"
       ]
     };
     return target;

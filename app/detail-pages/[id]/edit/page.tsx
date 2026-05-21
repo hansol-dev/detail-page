@@ -120,10 +120,10 @@ export default async function EditDetailPage({ params }: { params: Promise<{ id:
               </span>
               <ExistingProductPhotos assets={currentPhotos} disabled={disabled} />
             </div>
-            <label className="full">
+            <div className="full formField">
               <ImportanceFieldLabel field={meta("photos")} />
               <ProductPhotoUploadInput disabled={disabled} />
-            </label>
+            </div>
             <label className="full checkField">
               <input name="thumbnailRequested" type="checkbox" defaultChecked={draft.thumbnailRequested} disabled={disabled} />
               <span>
@@ -165,7 +165,7 @@ export default async function EditDetailPage({ params }: { params: Promise<{ id:
           <ProductFormSection title="고급 설정" description="꼭 넣거나 피해야 하는 문구가 있을 때만 사용하세요.">
             <label className="full">
               <span className="labelLine">
-                <span>상품별 필수 문구</span>
+                <span>상품별 브랜드 카피</span>
                 <span className="badge optional">선택</span>
               </span>
               <textarea name="requiredPhrases" disabled={disabled} defaultValue={draft.requiredPhrases ?? ""} />

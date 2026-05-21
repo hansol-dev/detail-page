@@ -361,6 +361,14 @@ label {
   font-weight: 600;
 }
 
+.formField {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 label > .badge {
   grid-row: 1;
   justify-self: end;
@@ -1676,6 +1684,29 @@ button.cutRegenerateButton:hover {
   gap: 10px;
 }
 
+.photoPreviewToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.photoPreviewToolbar button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: #fecaca;
+  background: #fff;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
 .photoPreviewItem {
   position: relative;
   display: grid;
@@ -1685,6 +1716,27 @@ button.cutRegenerateButton:hover {
   border: 1px solid var(--line-subtle);
   border-radius: 12px;
   background: #fff;
+  cursor: grab;
+  user-select: none;
+  will-change: transform;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.photoPreviewItem:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.photoPreviewItem.dragging {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+  cursor: grabbing;
+  opacity: 0.72;
+  transform: scale(0.98);
 }
 
 .photoPreviewItem img {
@@ -1693,6 +1745,7 @@ button.cutRegenerateButton:hover {
   object-fit: cover;
   object-position: center;
   background: var(--surface-elevated);
+  pointer-events: none;
 }
 
 .photoPreviewRemove {
@@ -1744,6 +1797,13 @@ button.cutRegenerateButton:hover {
 .photoPreviewItem small {
   color: var(--caption);
   font-size: 11px;
+}
+
+.photoOrderHint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
 }
 
 .editBox {

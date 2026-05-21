@@ -109,7 +109,7 @@ export function ActionFeedback() {
         <div className="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
           <div className="feedbackDialog">
             <div className="feedbackIcon" aria-hidden="true">
-              {pending.confirmMessage ? "?" : "i"}
+              {pending.confirmMessage ? "!" : "i"}
             </div>
             <div>
               <h2 id="feedback-title">{pending.confirmMessage ? "확인 필요" : "처리 안내"}</h2>
@@ -117,11 +117,9 @@ export function ActionFeedback() {
               {pending.confirmMessage ? <small>{pending.alertMessage}</small> : null}
             </div>
             <div className="feedbackActions">
-              {pending.confirmMessage ? (
-                <button type="button" onClick={() => setPending(null)}>
-                  취소
-                </button>
-              ) : null}
+              <button type="button" onClick={() => setPending(null)}>
+                취소
+              </button>
               <button className="primary" type="button" onClick={submitPending}>
                 {pending.confirmMessage ? "진행" : "확인"}
               </button>
@@ -135,7 +133,7 @@ export function ActionFeedback() {
           <div className="busyPanel">
             <div className="busySpinner" aria-hidden="true" />
             <strong>{busyMessage}</strong>
-            <p>완료될 때까지 화면을 닫지 말고 잠시만 기다려주세요.</p>
+            <p>완료될 때까지 화면을 닫지 말고 잠시만 기다려 주세요.</p>
           </div>
         </div>
       ) : null}

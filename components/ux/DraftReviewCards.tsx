@@ -73,7 +73,7 @@ export function DraftReviewCards({
           </div>
           <dl className="previewList">
             <div>
-              <dt>필수 문구</dt>
+              <dt>브랜드 카피</dt>
               <dd>{summary.brandApplied.requiredPhrases.join(", ") || "없음"}</dd>
             </div>
             <div>

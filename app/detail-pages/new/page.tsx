@@ -93,10 +93,10 @@ export default async function NewDetailPage() {
           </ProductFormSection>
 
           <ProductFormSection title="사진" description="상품 사진이 있으면 결과 품질이 좋아집니다.">
-            <label className="full">
+            <div className="full formField">
               <ImportanceFieldLabel field={meta("photos")} />
               <ProductPhotoUploadInput disabled={disabled} />
-            </label>
+            </div>
             <label className="full checkField">
               <input name="thumbnailRequested" type="checkbox" disabled={disabled} />
               <span>
@@ -138,7 +138,7 @@ export default async function NewDetailPage() {
           <ProductFormSection title="고급 설정" description="꼭 넣거나 피해야 하는 문구가 있을 때만 사용하세요.">
             <label className="full">
               <span className="labelLine">
-                <span>상품별 필수 문구</span>
+                <span>상품별 브랜드 카피</span>
                 <span className="badge optional">선택</span>
               </span>
               <textarea name="requiredPhrases" disabled={disabled} />

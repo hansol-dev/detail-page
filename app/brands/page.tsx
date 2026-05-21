@@ -98,7 +98,7 @@ function BrandEditForm({ brand }: { brand: BrandProfile }) {
       </label>
       <label className="full">
         <span className="labelLine">
-          <span>필수 문구</span>
+          <span>브랜드 카피</span>
           <span className="badge optional">선택</span>
         </span>
         <textarea name="requiredPhrases" defaultValue={brand.requiredPhrases ?? ""} />
@@ -181,7 +181,7 @@ export default async function BrandsPage() {
           </label>
           <label className="full">
             <span className="labelLine">
-              <span>필수 문구</span>
+              <span>브랜드 카피</span>
               <span className="badge optional">선택</span>
             </span>
             <textarea name="requiredPhrases" disabled={disabled} />

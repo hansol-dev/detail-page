@@ -126,7 +126,6 @@ function buildCutTemplates(draft: ProductDraft, brand: BrandProfile, memoryText:
   const sellingPoint = firstSentence(draft.sellingPoints, `${product}의 핵심 장점을 한눈에 보여주기`);
   const fact = firstSentence(draft.facts, "확인 가능한 상품 정보 중심으로 정리");
   const target = firstSentence(draft.targetCustomer, "구매를 고민하는 고객");
-  const required = compact(draft.requiredPhrases || brand.requiredPhrases, `${brand.brandName} 기준의 핵심 메시지`);
   const notice = "배송, 반품/교환, 고객센터 안내를 구매 전 확인해 주세요.";
   const noticeDetails = productNoticesToMarkdown(brand, draft);
   const tone = compact(brand.defaultTone, "담백하고 신뢰감 있는 톤");
@@ -138,7 +137,7 @@ function buildCutTemplates(draft: ProductDraft, brand: BrandProfile, memoryText:
       purpose: "첫 화면에서 상품명과 핵심 인상을 명확하게 전달",
       headline: product,
       subcopy: sellingPoint,
-      imageText: required,
+      imageText: sellingPoint,
       visual: "상품 대표 사진을 크게 배치하고 포인트 컬러로 브랜드 첫인상을 강조"
     },
     {
@@ -428,7 +427,7 @@ function planPromptInput(draft: ProductDraft, brand: BrandProfile, memoryText: s
       pointColor: brand.pointColor,
       subColor: brand.subColor,
       tone: brand.defaultTone || "담백하고 신뢰감 있는 톤",
-      requiredPhrases: draft.requiredPhrases || brand.requiredPhrases || "",
+      brandCopy: draft.requiredPhrases || brand.requiredPhrases || "",
       forbiddenPhrases: draft.forbiddenPhrases || brand.forbiddenPhrases || "",
       shippingNotice: brand.shippingNotice || "",
       returnExchangeNotice: brand.returnExchangeNotice || "",
@@ -558,6 +557,8 @@ async function generatePlanJsonWithAi(draft: ProductDraft, brand: BrandProfile, 
             "Never invent, infer, complete, or add customer-center phone numbers, operating hours, delivery carrier, delivery period, shipping fee, return period, exchange rules, return cost, or contact channel.",
             "If a notice item is not user-provided or verified, leave it out of noticeSourceText entirely. Do not write 확인 필요 as visible policy copy.",
             "The full set of cuts becomes one detail page, so each cut must have a distinct role and distinct visible copy.",
+            "Brand copy is not a required phrase for every cut. Use brandCopy sparingly only where it naturally improves the cut, such as hero, final trust, or a brand-context cut.",
+            "Do not repeat brandCopy across all cuts. Overusing brand copy creates resistance; avoid using it in more than 1-2 cuts unless the user explicitly asks.",
             "Avoid repeating the same headline, subcopy, imageText, brand slogan, product benefit, or notice concept across cuts. Use repeated brand phrases only when explicitly required by the approved product/brand inputs.",
             "Keep copy mobile-first: short Korean headline, concrete subcopy, concise imageText labels.",
             "For any noticeSourceText, preserve the user's original notice lines exactly without omission, summary, paraphrase, merge, or order change."
@@ -695,7 +696,7 @@ export async function generateApprovalMarkdown(userId: string, productDraftId: s
     "## 2. 브랜드 기본값",
     "",
     `- 기본 톤: ${valueOrNeeded(brand.defaultTone)}`,
-    `- 필수 문구: ${valueOrNeeded(draft.requiredPhrases || brand.requiredPhrases)}`,
+    `- 브랜드 카피: ${valueOrNeeded(draft.requiredPhrases || brand.requiredPhrases)}`,
     `- 금지 문구: ${valueOrNeeded(draft.forbiddenPhrases || brand.forbiddenPhrases)}`,
     "",
     "## 3. 사실 정보",
