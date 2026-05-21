@@ -10,6 +10,7 @@ type ImageReferences = {
   brandName: string | null;
   logoAsset: Asset | null;
   productPhotoAsset: Asset | null;
+  productPhotoOverride: boolean;
   logoDataUri: string | null;
   productPhotoDataUri: string | null;
 };
@@ -31,7 +32,7 @@ type CutGenerationInput = {
 };
 
 function textReplacementFromRevision(request: string) {
-  const match = request.match(/臾멸뎄留?援먯껜:\s*"([^"]+)"\s*->\s*"([^"]+)"/);
+  const match = request.match(/(?:TEXT_REPLACE|문구만 교체|臾멸뎄留.?援먯껜):\s*"([^"]+)"\s*->\s*"([^"]+)"/);
   if (!match) return null;
   return { source: match[1], replacement: match[2] };
 }
@@ -47,7 +48,12 @@ function isTextOnlyRevision(request: string) {
 }
 
 function isStrictTextEdit(input: CutGenerationInput) {
-  return Boolean(input.baseImageAsset && input.revisionRequest && isTextOnlyRevision(input.revisionRequest));
+  return Boolean(
+    input.baseImageAsset &&
+      input.revisionRequest &&
+      isTextOnlyRevision(input.revisionRequest) &&
+      !input.references.productPhotoOverride
+  );
 }
 
 function isLogoRevisionRequest(request: string | undefined) {
@@ -57,6 +63,55 @@ function isLogoRevisionRequest(request: string | undefined) {
         request
       )
   );
+}
+
+function isLogoRemovalRequest(request: string | undefined) {
+  return Boolean(
+    request &&
+      /(remove|delete|without logo|no logo|hide logo|\uB85C\uACE0.*(\uC0AD\uC81C|\uC81C\uAC70|\uBE7C|\uC5C6\uC560|\uB123\uC9C0\s*\uB9C8|\uC548\s*\uB123)|(\uC0AD\uC81C|\uC81C\uAC70|\uBE7C|\uC5C6\uC560).*\uB85C\uACE0)/i.test(
+        request
+      )
+  );
+}
+
+function shouldUseBrandLogoInCut(input: CutGenerationInput) {
+  if (!input.references.logoAsset || input.outputKind === "generated_thumbnail") return false;
+  if (isLogoRemovalRequest(input.revisionRequest)) return false;
+  if (isLogoRevisionRequest(input.revisionRequest)) return true;
+  return input.cutNumber === 1 && !input.baseImageAsset;
+}
+
+function revisionReplacementGuidance(request: string | undefined) {
+  if (!request?.trim()) return "";
+  const replacement = textReplacementFromRevision(request);
+  if (!replacement) {
+    return [
+      "MANDATORY REVISION: Apply the user's revision request visibly in this regenerated cut.",
+      "Do not ignore the revision request. Do not only store it as metadata.",
+      "Keep unrelated layout, product photo, colors, and copy as close to the current cut as possible."
+    ].join("\n");
+  }
+
+  return [
+    "MANDATORY TEXT REPLACEMENT:",
+    `- Find this exact visible phrase if present: ${replacement.source}`,
+    `- Replace it with this exact phrase: ${replacement.replacement}`,
+    "- The replacement phrase must appear visibly in the regenerated image.",
+    "- Remove the old phrase from the regenerated image unless it appears in an unrelated approved context.",
+    "- Keep all other visible copy, layout, product photo, colors, and spacing as close to the current cut as possible."
+  ].join("\n");
+}
+
+function productPhotoReplacementGuidance(references: ImageReferences) {
+  if (!references.productPhotoOverride) return "";
+  return [
+    "MANDATORY PRODUCT PHOTO REPLACEMENT:",
+    "- The user selected a specific uploaded product photo for this cut.",
+    "- Use the selected uploaded product photo as the primary source of truth for the main product image in this cut.",
+    "- Replace any wrong product image, wrong package, wrong label, wrong flavor, or wrong product form with the selected product photo reference.",
+    "- Preserve the existing cut layout, background, typography, and approved copy as much as possible.",
+    "- Do not invent a different product, package, label, ingredient, logo, option, or flavor that is not visible in the selected photo."
+  ].join("\n");
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>) {
@@ -160,18 +215,34 @@ function wrapText(value: string, maxLength = 34) {
   return result;
 }
 
-function findReferenceAssets(db: AppDb, userId: string, brand: BrandProfile | undefined, draft: ProductDraft) {
+function findReferenceAssets(
+  db: AppDb,
+  userId: string,
+  brand: BrandProfile | undefined,
+  draft: ProductDraft,
+  selectedProductPhotoAssetId?: string | null
+) {
   const logoAsset = brand?.logoAssetId
     ? db.assets.find((asset) => asset.id === brand.logoAssetId && asset.userId === userId && asset.kind === "brand_logo") ?? null
     : null;
+  const selectedProductPhotoAsset =
+    selectedProductPhotoAssetId && draft.photoAssetIds.includes(selectedProductPhotoAssetId)
+      ? db.assets.find(
+          (asset) =>
+            asset.id === selectedProductPhotoAssetId &&
+            asset.userId === userId &&
+            asset.kind === "product_photo"
+        ) ?? null
+      : null;
   const productPhotoAsset =
+    selectedProductPhotoAsset ??
     draft.photoAssetIds
       .map((assetId) =>
         db.assets.find((asset) => asset.id === assetId && asset.userId === userId && asset.kind === "product_photo")
       )
       .find((asset): asset is Asset => Boolean(asset)) ?? null;
 
-  return { logoAsset, productPhotoAsset };
+  return { logoAsset, productPhotoAsset, productPhotoOverride: Boolean(selectedProductPhotoAsset) };
 }
 
 async function assetDataUri(asset: Asset | null) {
@@ -184,25 +255,37 @@ async function buildImageReferences(
   db: AppDb,
   userId: string,
   brand: BrandProfile | undefined,
-  draft: ProductDraft
+  draft: ProductDraft,
+  selectedProductPhotoAssetId?: string | null
 ): Promise<ImageReferences> {
-  const { logoAsset, productPhotoAsset } = findReferenceAssets(db, userId, brand, draft);
+  const { logoAsset, productPhotoAsset, productPhotoOverride } = findReferenceAssets(
+    db,
+    userId,
+    brand,
+    draft,
+    selectedProductPhotoAssetId
+  );
   return {
     brandName: brand?.brandName ?? null,
     logoAsset,
     productPhotoAsset,
+    productPhotoOverride,
     logoDataUri: await assetDataUri(logoAsset),
     productPhotoDataUri: await assetDataUri(productPhotoAsset)
   };
 }
 
-function referenceSummary(references: ImageReferences) {
+function referenceSummary(references: ImageReferences, options: { logoAllowed?: boolean } = {}) {
   return [
-    references.productPhotoAsset
-      ? "Use the uploaded product photo as the primary product reference. Preserve the actual product shape, color, packaging, and visible label details as much as possible."
+    references.productPhotoAsset && references.productPhotoOverride
+      ? "The selected uploaded product photo is mandatory for this cut. Use it as the primary product image reference and correct any wrong product image in the current cut."
+      : references.productPhotoAsset
+        ? "Use the uploaded product photo as the primary product reference. Preserve the actual product shape, color, packaging, and visible label details as much as possible."
       : "No product photo was provided; create a conservative product presentation without inventing factual claims.",
-    references.logoAsset
-      ? "Do not draw, recreate, crop, or stylize the brand logo inside the AI image. Leave clean whitespace near the top center for the app to place the uploaded original logo file after generation."
+    references.logoAsset && options.logoAllowed
+      ? "This cut is allowed to use the brand logo. Do not draw, recreate, crop, or stylize it inside the AI image. Leave clean whitespace near the top center for the app to place the uploaded original logo file after generation."
+      : references.logoAsset
+        ? "This cut should not use the brand logo. A logo does not need to appear on every cut. Avoid repeated logo use and do not add a brand mark, symbol-only logo, typed logo, or logo-like decoration."
       : references.brandName
         ? `Brand name: ${references.brandName}`
         : ""
@@ -275,6 +358,9 @@ function imagePrompt(input: CutGenerationInput) {
   const approvedCutSection = input.markdown.length > 8000 ? input.markdown.slice(0, 8000) : input.markdown;
   const hasNoticeSource = /- ?덈궡?ы빆 ?먮Ц:/m.test(input.markdown);
   const isLogoRevision = isLogoRevisionRequest(input.revisionRequest);
+  const logoAllowed = shouldUseBrandLogoInCut(input);
+  const mandatoryRevisionGuidance = revisionReplacementGuidance(input.revisionRequest);
+  const mandatoryPhotoGuidance = productPhotoReplacementGuidance(input.references);
   const noticeGuidance = hasNoticeSource
     ? "This is the only policy notice cut. Use only the notice items explicitly present in the approved cut section. Preserve every provided notice item exactly as approved. Do not omit, summarize, merge, paraphrase, change, infer, or add customer-center, shipping, return, exchange, carrier, operating-hour, fee, or contact details that are not present in the approved cut section."
     : "This is not a policy notice cut. Do not add contact, logistics, delivery, return, exchange, or customer-service policy blocks, icons, or labels. Focus only on this cut's approved product story and composition.";
@@ -282,7 +368,13 @@ function imagePrompt(input: CutGenerationInput) {
   const revisionGuidance = input.revisionRequest
     ? [
         "This is a revision for only this single cut image.",
-        isLogoRevision && input.references.logoAsset
+        isLogoRemovalRequest(input.revisionRequest)
+          ? [
+              "The user is asking to remove or avoid logo repetition in this cut.",
+              "Remove visible logos, logo-like marks, repeated brand headers, and symbol-only logo decorations from this cut.",
+              "Do not add a new logo. Preserve the rest of the cut layout and non-logo text as much as possible."
+            ].join("\n")
+          : isLogoRevision && input.references.logoAsset
           ? [
               "The user is asking for a logo correction. The uploaded logo reference image is the only source of truth for the logo.",
               "Replace every generated, invented, partial, symbol-only, distorted, or stylized logo in the current cut with the uploaded logo image.",
@@ -309,6 +401,8 @@ function imagePrompt(input: CutGenerationInput) {
               ].filter(Boolean).join("\n")
             : "Preserve the approved cut theme and do not rewrite unrelated copy.",
         "If the request says text replacement with A -> B, replace only that exact phrase. Do not summarize, expand, rephrase, or change other copy.",
+        mandatoryRevisionGuidance,
+        mandatoryPhotoGuidance,
         "Render all Korean text crisp, high-contrast, and readable. Prefer fewer, larger text blocks over many tiny labels.",
         "The revision request is private editing instruction only. Never render the request text itself, and never render labels such as 'Revision request', '?섏젙 ?붿껌', or '?섏젙 ?붿껌 諛섏쁺' inside the image.",
         `Private revision instruction:\n${input.revisionRequest}`
@@ -323,7 +417,8 @@ function imagePrompt(input: CutGenerationInput) {
     `Cut number: ${String(input.cutNumber).padStart(2, "0")}`,
     `Cut theme: ${input.title}`,
     `Brand point color: ${input.pointColor}`,
-    referenceSummary(input.references),
+    referenceSummary(input.references, { logoAllowed }),
+    mandatoryPhotoGuidance,
     revisionGuidance,
     "Priority order: 1) approved cut section, 2) common operating memory, 3) common expression guide, 4) brand style.",
     "These cuts are part of one complete detail page. Avoid repeating the same visible copy, benefit, layout role, or notice concept across cuts.",
@@ -333,8 +428,10 @@ function imagePrompt(input: CutGenerationInput) {
     noticeGuidance,
     "Use approved visible copy and approved product facts from the approved cut section. You may also use product facts, ingredient names, flavor names, origin text, quantity, or package claims only when they are clearly readable on the uploaded product/package photo. Do not invent or infer facts that are not approved and not visibly readable on the product/package photo.",
     "When using readable package text as visible sales copy, keep it faithful to the package wording. Do not exaggerate, translate into stronger claims, add rankings, certifications, review counts, effects, or quantified benefits unless they are clearly shown on the package or approved cut section.",
-    input.references.logoAsset
-      ? "Logo rule: do not render any logo, brand mark, symbol-only logo, or typed replacement logo yourself. Reserve clean top-center whitespace; the application will composite the uploaded original logo file after image generation."
+    input.references.logoAsset && logoAllowed
+      ? "Logo rule for this cut only: the brand logo may appear once. Do not render any logo, brand mark, symbol-only logo, or typed replacement logo yourself. Reserve clean top-center whitespace; the application will composite the uploaded original logo file after image generation."
+      : input.references.logoAsset
+        ? "Logo repetition rule: the logo is not required on every cut. For this cut, do not place or invent any logo, brand mark, symbol-only logo, typed replacement logo, or logo-like header. Avoid repeated logo use across the detail page."
       : "",
     "Do not invent certifications, awards, medical claims, rankings, review counts, or unverifiable facts.",
     "The result should look like a real detailed page section, not a wireframe or placeholder.",
@@ -387,7 +484,7 @@ async function requestOpenAiImage(input: CutGenerationInput, endpoint: "generati
             if (!strictTextEdit && canUseAsOpenAiReference(input.references.productPhotoAsset)) {
               await appendAssetToForm(form, input.references.productPhotoAsset);
             }
-            if (!strictTextEdit && canUseAsOpenAiReference(input.references.logoAsset)) {
+            if (!strictTextEdit && shouldUseBrandLogoInCut(input) && canUseAsOpenAiReference(input.references.logoAsset)) {
               await appendAssetToForm(form, input.references.logoAsset);
             }
             return form;
@@ -458,7 +555,7 @@ async function requestOpenAiImage(input: CutGenerationInput, endpoint: "generati
 
 async function compositeBrandLogoOnCut(input: CutGenerationInput, asset: Asset) {
   const logoAsset = input.references.logoAsset;
-  if (!logoAsset || input.outputKind === "generated_thumbnail") return asset;
+  if (!logoAsset || !shouldUseBrandLogoInCut(input)) return asset;
   if (asset.mimeType !== "image/png" || !canUseAsOpenAiReference(logoAsset)) return asset;
 
   const baseBytes = await fs.readFile(assetPath(asset.storageKey));
@@ -495,7 +592,7 @@ async function generateOpenAiImage(input: CutGenerationInput) {
   const hasReferenceImage =
     canUseAsOpenAiReference(input.baseImageAsset ?? null) ||
     canUseAsOpenAiReference(input.references.productPhotoAsset) ||
-    canUseAsOpenAiReference(input.references.logoAsset);
+    (shouldUseBrandLogoInCut(input) && canUseAsOpenAiReference(input.references.logoAsset));
   return requestOpenAiImage(input, hasReferenceImage ? "edits" : "generations");
 }
 
@@ -524,7 +621,7 @@ function thumbnailPrompt(input: {
     `Product: ${input.productName}`,
     input.brandName ? `Brand: ${input.brandName}` : "",
     `Brand point color: ${input.pointColor}`,
-    referenceSummary(input.references),
+    referenceSummary(input.references, { logoAllowed: false }),
     "Use the uploaded product photo as the main visual when available.",
     "Keep the product large and centered with enough margin for marketplace cropping.",
     "Use minimal Korean text only if it is clearly readable. Do not create claims, certifications, review counts, discount rates, or unverifiable facts.",
@@ -855,7 +952,12 @@ export async function regenerateCutImageForDraftCut(userId: string, productDraft
   throw new Error(`Cut ${String(cutNumber).padStart(2, "0")} 湲곗〈 ?대?吏瑜?李얠쓣 ???놁뒿?덈떎.`);
 }
 
-export async function saveCutRevision(userId: string, cutId: string, revisionRequest: string) {
+export async function saveCutRevision(
+  userId: string,
+  cutId: string,
+  revisionRequest: string,
+  options: { selectedProductPhotoAssetId?: string | null } = {}
+) {
   const request = revisionRequest.trim();
   const db = await readDb();
   const cut = db.generatedCuts.find((item) => item.id === cutId);
@@ -877,7 +979,7 @@ export async function saveCutRevision(userId: string, cutId: string, revisionReq
     });
   }
 
-  const references = await buildImageReferences(db, userId, brand, draft);
+  const references = await buildImageReferences(db, userId, brand, draft, options.selectedProductPhotoAssetId);
   const markdown = md ? extractCutSection(md.content, cut.cutNumber) || md.content : "";
   const revisedMarkdown = md
     ? withCommonGenerationContext(md.content, applyRevisionToMarkdown(markdown, request))

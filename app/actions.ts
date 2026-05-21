@@ -283,11 +283,19 @@ export async function saveCutRevisionAction(formData: FormData) {
   const sourceText = text(formData, "revisionSourceText");
   const replacementText = text(formData, "revisionReplacementText");
   const freeformRequest = text(formData, "revisionRequest");
+  const replaceProductPhoto = formData.get("replaceProductPhoto") === "on";
+  const selectedProductPhotoAssetId = text(formData, "productPhotoAssetId");
   const scopedTextRequest =
     sourceText && replacementText
       ? [`문구만 교체: "${sourceText}" -> "${replacementText}"`, freeformRequest].filter(Boolean).join("\n")
       : freeformRequest;
-  await saveCutRevision(userId, cutId, scopedTextRequest);
+  const photoReplacementRequest =
+    replaceProductPhoto && selectedProductPhotoAssetId
+      ? "PRODUCT_PHOTO_REPLACE: 선택한 상품 사진을 기준으로 이 컷의 메인 상품 이미지를 교체해줘. 기존 문구와 레이아웃은 최대한 유지해줘."
+      : "";
+  await saveCutRevision(userId, cutId, [scopedTextRequest, photoReplacementRequest].filter(Boolean).join("\n"), {
+    selectedProductPhotoAssetId: replaceProductPhoto ? selectedProductPhotoAssetId : null
+  });
   revalidatePath(`/detail-pages/${productDraftId}/review?jobId=${jobId}`);
   redirect(`/detail-pages/${productDraftId}/review?jobId=${jobId}`);
 }

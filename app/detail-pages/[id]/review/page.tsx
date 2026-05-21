@@ -13,6 +13,7 @@ import { getJobWithCuts, listJobsForDraft } from "@/lib/services/image-generatio
 import { buildDownloadableCuts, buildDownloadableThumbnail } from "@/lib/ux/downloads";
 import { cutStatusLabel, jobStatusLabel } from "@/lib/ux/copy";
 import { buildGenerationReadiness } from "@/lib/ux/generation-readiness";
+import type { Asset } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,13 @@ export default async function ReviewPage({
     result && result.draft.thumbnailAssetId
       ? db.assets.find((item) => item.id === result.draft.thumbnailAssetId)
       : null;
+  const productPhotoAssets = result
+    ? result.draft.photoAssetIds
+        .map((assetId) =>
+          db.assets.find((item) => item.id === assetId && item.userId === userId && item.kind === "product_photo")
+        )
+        .filter((asset): asset is Asset => Boolean(asset))
+    : [];
   const downloadableThumbnail = result
     ? buildDownloadableThumbnail({ productName: result.draft.productName, asset: thumbnailAsset })
     : null;
@@ -233,6 +241,32 @@ export default async function ReviewPage({
                         <input type="hidden" name="cutId" value={cut.id} />
                         <input type="hidden" name="productDraftId" value={id} />
                         <input type="hidden" name="jobId" value={result.job.id} />
+                        {productPhotoAssets.length ? (
+                          <details className="revisionPhotoSelector">
+                            <summary>상품 사진 교체</summary>
+                            <label className="checkField">
+                              <input type="checkbox" name="replaceProductPhoto" />
+                              <span>
+                                <strong>선택한 상품 사진으로 메인 상품 이미지 교체</strong>
+                                <small>문구와 레이아웃은 최대한 유지하고, 상품 이미지 기준만 선택한 사진으로 바꿉니다.</small>
+                              </span>
+                            </label>
+                            <div className="revisionPhotoChoices">
+                              {productPhotoAssets.map((photo, index) => (
+                                <label key={photo.id}>
+                                  <input
+                                    type="radio"
+                                    name="productPhotoAssetId"
+                                    value={photo.id}
+                                    defaultChecked={index === 0}
+                                  />
+                                  <img src={`/api/assets/${photo.id}`} alt={`상품 사진 ${index + 1}`} />
+                                  <span>사진 {index + 1}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
                         <div className="revisionReplaceGrid">
                           <label>
                             <span className="labelLine">
