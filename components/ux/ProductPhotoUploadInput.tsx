@@ -96,7 +96,6 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
               url: URL.createObjectURL(file)
             }))
           ]);
-          event.currentTarget.value = "";
         }}
       />
       {previews.length ? (
