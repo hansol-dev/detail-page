@@ -13,7 +13,7 @@ const SUPABASE_STATE_KEY = "main";
 
 function supabaseConfig() {
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || "detail-page-assets";
   if (!url || !serviceRoleKey) return null;
   return { url, serviceRoleKey, bucket };
