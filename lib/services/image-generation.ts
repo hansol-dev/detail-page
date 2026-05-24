@@ -9,6 +9,7 @@ type ImageReferences = {
   brandName: string | null;
   logoAsset: Asset | null;
   productPhotoAsset: Asset | null;
+  productPhotoAssets: Asset[];
   productPhotoOverride: boolean;
   logoDataUri: string | null;
   productPhotoDataUri: string | null;
@@ -106,12 +107,17 @@ function productPhotoReplacementGuidance(references: ImageReferences) {
   return [
     "PRODUCT PHOTO REFERENCE ADJUSTMENT:",
     "- The user selected a specific uploaded product photo for this cut.",
-    "- Use the selected photo as a visual reference to correct the product's identity, package shape, label direction, flavor/option, color, and visible product details.",
+    "- Use the selected photo as the primary visual reference to correct the product's identity, package shape, label direction, flavor/option, color, and visible product details.",
+    references.productPhotoAssets.length > 1
+      ? `- Also use the other uploaded product photos as secondary references (${references.productPhotoAssets.length} total) so the cut does not ignore alternate angles, package sides, contents, or product variants.`
+      : "",
     "- Do not copy the selected photo literally as a flat pasted image unless the existing cut composition already calls for that treatment.",
     "- Keep the cut's designed composition, lighting, scale, background, typography, and approved copy as much as possible.",
     "- The regenerated product should feel designed into the current detail-page cut while staying faithful to the selected reference photo.",
     "- Do not invent a different product, package, label, ingredient, logo, option, or flavor that conflicts with the selected photo."
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>) {
@@ -234,15 +240,25 @@ function findReferenceAssets(
             asset.kind === "product_photo"
         ) ?? null
       : null;
-  const productPhotoAsset =
-    selectedProductPhotoAsset ??
-    draft.photoAssetIds
-      .map((assetId) =>
-        db.assets.find((asset) => asset.id === assetId && asset.userId === userId && asset.kind === "product_photo")
-      )
-      .find((asset): asset is Asset => Boolean(asset)) ?? null;
+  const allProductPhotoAssets = draft.photoAssetIds
+    .map((assetId) =>
+      db.assets.find((asset) => asset.id === assetId && asset.userId === userId && asset.kind === "product_photo")
+    )
+    .filter((asset): asset is Asset => Boolean(asset));
+  const productPhotoAssets = selectedProductPhotoAsset
+    ? [
+        selectedProductPhotoAsset,
+        ...allProductPhotoAssets.filter((asset) => asset.id !== selectedProductPhotoAsset.id)
+      ]
+    : allProductPhotoAssets;
+  const productPhotoAsset = productPhotoAssets[0] ?? null;
 
-  return { logoAsset, productPhotoAsset, productPhotoOverride: Boolean(selectedProductPhotoAsset) };
+  return {
+    logoAsset,
+    productPhotoAsset,
+    productPhotoAssets,
+    productPhotoOverride: Boolean(selectedProductPhotoAsset)
+  };
 }
 
 async function assetDataUri(asset: Asset | null) {
@@ -258,7 +274,7 @@ async function buildImageReferences(
   draft: ProductDraft,
   selectedProductPhotoAssetId?: string | null
 ): Promise<ImageReferences> {
-  const { logoAsset, productPhotoAsset, productPhotoOverride } = findReferenceAssets(
+  const { logoAsset, productPhotoAsset, productPhotoAssets, productPhotoOverride } = findReferenceAssets(
     db,
     userId,
     brand,
@@ -269,6 +285,7 @@ async function buildImageReferences(
     brandName: brand?.brandName ?? null,
     logoAsset,
     productPhotoAsset,
+    productPhotoAssets,
     productPhotoOverride,
     logoDataUri: await assetDataUri(logoAsset),
     productPhotoDataUri: await assetDataUri(productPhotoAsset)
@@ -276,11 +293,16 @@ async function buildImageReferences(
 }
 
 function referenceSummary(references: ImageReferences, options: { logoAllowed?: boolean } = {}) {
+  const productPhotoCount = references.productPhotoAssets.length;
   return [
     references.productPhotoAsset && references.productPhotoOverride
-      ? "Use the selected uploaded product photo as a visual reference to correct product identity and visible details, while preserving the designed composition of the cut. Do not paste it literally unless appropriate."
+      ? productPhotoCount > 1
+        ? `Use the selected uploaded product photo as the primary visual reference. Also inspect the other uploaded product photos (${productPhotoCount} total) as secondary references for package angle, label details, contents, color, and scale. Do not paste any photo literally unless appropriate.`
+        : "Use the selected uploaded product photo as a visual reference to correct product identity and visible details, while preserving the designed composition of the cut. Do not paste it literally unless appropriate."
       : references.productPhotoAsset
-        ? "Use the uploaded product photo as the primary product reference. Preserve the actual product shape, color, packaging, and visible label details as much as possible."
+        ? productPhotoCount > 1
+          ? `Use all ${productPhotoCount} uploaded product photos as visual references. Cross-check front/back/side package shape, label wording, color, contents, scale, and product variants. Do not rely only on the first photo.`
+          : "Use the uploaded product photo as the primary product reference. Preserve the actual product shape, color, packaging, and visible label details as much as possible."
       : "No product photo was provided; create a conservative product presentation without inventing factual claims.",
     references.logoAsset && options.logoAllowed
       ? "This cut is allowed to use the brand logo. Do not draw, recreate, crop, or stylize it inside the AI image. Leave clean whitespace near the top center for the app to place the uploaded original logo file after generation."
@@ -418,6 +440,9 @@ function imagePrompt(input: CutGenerationInput) {
     `Cut theme: ${input.title}`,
     `Brand point color: ${input.pointColor}`,
     referenceSummary(input.references, { logoAllowed }),
+    input.references.productPhotoAssets.length > 1
+      ? "Multiple product photos were uploaded. Use every provided product-photo reference to understand front/back/side views, label wording, package shape, product contents, colors, scale, and option differences. Do not ignore later photos or base the cut only on the first uploaded image. If photos show alternate angles of the same product, merge that knowledge into one faithful product depiction; do not create conflicting extra products unless the approved cut asks for a lineup."
+      : "",
     mandatoryPhotoGuidance,
     revisionGuidance,
     "Priority order: 1) approved cut section, 2) common operating memory, 3) common expression guide, 4) brand style.",
@@ -453,6 +478,16 @@ function canUseAsOpenAiReference(asset: Asset | null): asset is Asset {
   return Boolean(asset && ["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(asset.mimeType));
 }
 
+function productPhotoReferenceAssets(references: ImageReferences) {
+  const assets = references.productPhotoOverride && references.productPhotoAsset
+    ? [
+        references.productPhotoAsset,
+        ...references.productPhotoAssets.filter((asset) => asset.id !== references.productPhotoAsset?.id)
+      ]
+    : references.productPhotoAssets;
+  return assets.filter(canUseAsOpenAiReference).slice(0, 8);
+}
+
 async function requestOpenAiImage(input: CutGenerationInput, endpoint: "generations" | "edits") {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -482,8 +517,10 @@ async function requestOpenAiImage(input: CutGenerationInput, endpoint: "generati
               await appendAssetToForm(form, baseImageAsset);
             }
             const strictTextEdit = isStrictTextEdit(input) && !isLogoRevisionRequest(input.revisionRequest);
-            if (!strictTextEdit && canUseAsOpenAiReference(input.references.productPhotoAsset)) {
-              await appendAssetToForm(form, input.references.productPhotoAsset);
+            if (!strictTextEdit) {
+              for (const productPhotoAsset of productPhotoReferenceAssets(input.references)) {
+                await appendAssetToForm(form, productPhotoAsset);
+              }
             }
             if (!strictTextEdit && shouldUseBrandLogoInCut(input) && canUseAsOpenAiReference(input.references.logoAsset)) {
               await appendAssetToForm(form, input.references.logoAsset);
@@ -592,7 +629,7 @@ async function compositeBrandLogoOnCut(input: CutGenerationInput, asset: Asset) 
 async function generateOpenAiImage(input: CutGenerationInput) {
   const hasReferenceImage =
     canUseAsOpenAiReference(input.baseImageAsset ?? null) ||
-    canUseAsOpenAiReference(input.references.productPhotoAsset) ||
+    productPhotoReferenceAssets(input.references).length > 0 ||
     (shouldUseBrandLogoInCut(input) && canUseAsOpenAiReference(input.references.logoAsset));
   return requestOpenAiImage(input, hasReferenceImage ? "edits" : "generations");
 }
@@ -623,7 +660,9 @@ function thumbnailPrompt(input: {
     input.brandName ? `Brand: ${input.brandName}` : "",
     `Brand point color: ${input.pointColor}`,
     referenceSummary(input.references, { logoAllowed: false }),
-    "Use the uploaded product photo as the main visual when available.",
+    input.references.productPhotoAssets.length > 1
+      ? "Use all uploaded product photos as visual references for the thumbnail. Pick the clearest hero angle, but cross-check every uploaded image for package identity, color, label, and contents."
+      : "Use the uploaded product photo as the main visual when available.",
     "Keep the product large and centered with enough margin for marketplace cropping.",
     "Use minimal Korean text only if it is clearly readable. Do not create claims, certifications, review counts, discount rates, or unverifiable facts.",
     "Do not make it look like a full detail-page section. It should work as a single product listing thumbnail.",
@@ -839,9 +878,9 @@ export async function processImageGenerationStep(userId: string, jobId: string) 
       qa: {
         textReadable: true,
         koreanTextMatchesApprovedCopy: true,
-        productMatchesReference: Boolean(references.productPhotoAsset),
+        productMatchesReference: references.productPhotoAssets.length > 0,
         notes: [
-          ...(references.productPhotoAsset ? [] : ["상품 사진이 없어 컨셉 초안으로 생성했습니다."]),
+          ...(references.productPhotoAssets.length ? [] : ["상품 사진이 없어 컨셉 초안으로 생성했습니다."]),
           ...(references.logoAsset ? [] : ["브랜드 로고가 없어 텍스트 브랜드명 기준으로 생성했습니다."]),
           ...(provider === "dev-svg-provider" ? ["OPENAI_API_KEY가 없어 테스트 이미지로 생성했습니다."] : [])
         ]
@@ -950,9 +989,9 @@ export async function regenerateCutImage(userId: string, cutId: string) {
     target.qa = {
       textReadable: true,
       koreanTextMatchesApprovedCopy: true,
-      productMatchesReference: Boolean(references.productPhotoAsset),
+      productMatchesReference: references.productPhotoAssets.length > 0,
       notes: [
-        ...(references.productPhotoAsset ? [] : ["?곹뭹 ?ъ쭊???놁뼱 肄섏뀎??珥덉븞?쇰줈 ?앹꽦?덉뒿?덈떎."]),
+        ...(references.productPhotoAssets.length ? [] : ["?곹뭹 ?ъ쭊???놁뼱 肄섏뀎??珥덉븞?쇰줈 ?앹꽦?덉뒿?덈떎."]),
         ...(references.logoAsset ? [] : ["釉뚮옖??濡쒓퀬媛 ?놁뼱 ?띿뒪??釉뚮옖?쒕챸 湲곗??쇰줈 ?앹꽦?덉뒿?덈떎."]),
         ...(provider === "dev-svg-provider" ? ["OPENAI_API_KEY媛 ?놁뼱 ?뚯뒪???대?吏濡??앹꽦?덉뒿?덈떎."] : []),
         `?뱀씤 珥덉븞 v${md.version} 湲곗??쇰줈 ??而룸쭔 ?ㅼ떆 ?앹꽦?덉뒿?덈떎.`
@@ -1061,7 +1100,7 @@ export async function saveCutRevision(
       ...target.qa,
       textReadable: true,
       koreanTextMatchesApprovedCopy: true,
-      productMatchesReference: Boolean(references.productPhotoAsset),
+      productMatchesReference: references.productPhotoAssets.length > 0,
       notes: [
         ...target.qa.notes.filter(
           (note) =>
