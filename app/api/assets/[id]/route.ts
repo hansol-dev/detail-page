@@ -1,6 +1,5 @@
-import fs from "fs/promises";
 import { NextResponse } from "next/server";
-import { assetPath, readDb } from "@/lib/store";
+import { readAssetBytes, readDb } from "@/lib/store";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,7 +8,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!asset) {
     return new NextResponse("Not found", { status: 404 });
   }
-  const bytes = await fs.readFile(assetPath(asset.storageKey));
+  const bytes = await readAssetBytes(asset);
   return new NextResponse(bytes, {
     headers: {
       "content-type": asset.mimeType,

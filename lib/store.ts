@@ -9,6 +9,29 @@ const ROOT = process.cwd();
 const DATA_DIR = path.join(ROOT, ".data");
 const STORAGE_DIR = path.join(DATA_DIR, "assets");
 const DB_PATH = path.join(DATA_DIR, "detail-page-web-tool.json");
+const SUPABASE_STATE_KEY = "main";
+
+function supabaseConfig() {
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "detail-page-assets";
+  if (!url || !serviceRoleKey) return null;
+  return { url, serviceRoleKey, bucket };
+}
+
+function supabaseHeaders(contentType = "application/json") {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured");
+  return {
+    apikey: config.serviceRoleKey,
+    authorization: `Bearer ${config.serviceRoleKey}`,
+    "content-type": contentType
+  };
+}
+
+function encodeStorageKey(storageKey: string) {
+  return storageKey.split("/").map(encodeURIComponent).join("/");
+}
 
 function now() {
   return new Date().toISOString();
@@ -80,10 +103,48 @@ async function ensureDataFile() {
   }
 }
 
-export async function readDb(): Promise<AppDb> {
-  await ensureDataFile();
-  const raw = await fs.readFile(DB_PATH, "utf8");
-  const db = JSON.parse(raw) as AppDb;
+async function readSupabaseDb(): Promise<AppDb> {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured");
+
+  const response = await fetch(
+    `${config.url}/rest/v1/detail_page_app_state?key=eq.${encodeURIComponent(SUPABASE_STATE_KEY)}&select=data`,
+    { headers: supabaseHeaders() }
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to read Supabase app state: ${response.status} ${await response.text()}`);
+  }
+
+  const rows = (await response.json()) as Array<{ data: AppDb | null }>;
+  if (rows[0]?.data) return normalizeDb(rows[0].data);
+
+  const db = normalizeDb(initialDb());
+  await writeSupabaseDb(db);
+  return db;
+}
+
+async function writeSupabaseDb(db: AppDb) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured");
+
+  const response = await fetch(`${config.url}/rest/v1/detail_page_app_state?on_conflict=key`, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders(),
+      prefer: "resolution=merge-duplicates"
+    },
+    body: JSON.stringify({
+      key: SUPABASE_STATE_KEY,
+      data: db,
+      updated_at: now()
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to write Supabase app state: ${response.status} ${await response.text()}`);
+  }
+}
+
+function normalizeDb(db: AppDb): AppDb {
   if (!db.users.some((user) => user.email.toLowerCase() === "lec")) {
     const demoSeller = db.users.find((user) => user.email.toLowerCase() === "seller@example.com");
     if (demoSeller) demoSeller.email = "lec";
@@ -94,7 +155,20 @@ export async function readDb(): Promise<AppDb> {
   return db;
 }
 
+export async function readDb(): Promise<AppDb> {
+  if (supabaseConfig()) return readSupabaseDb();
+
+  await ensureDataFile();
+  const raw = await fs.readFile(DB_PATH, "utf8");
+  return normalizeDb(JSON.parse(raw) as AppDb);
+}
+
 export async function writeDb(db: AppDb) {
+  if (supabaseConfig()) {
+    await writeSupabaseDb(db);
+    return;
+  }
+
   await ensureDataFile();
   await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
 }
@@ -142,9 +216,27 @@ export async function saveAsset(input: {
   const ext = path.extname(input.fileName) || extensionForMime(input.mimeType);
   const id = createId("asset");
   const storageKey = `${input.userId}/${input.kind}/${id}${ext}`;
-  const fullPath = assetPath(storageKey);
-  await fs.mkdir(path.dirname(fullPath), { recursive: true });
-  await fs.writeFile(fullPath, input.bytes);
+  const config = supabaseConfig();
+  if (config) {
+    const response = await fetch(
+      `${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}/${encodeStorageKey(storageKey)}`,
+      {
+        method: "PUT",
+        headers: {
+          ...supabaseHeaders(input.mimeType || "application/octet-stream"),
+          "x-upsert": "true"
+        },
+        body: input.bytes
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to upload Supabase asset: ${response.status} ${await response.text()}`);
+    }
+  } else {
+    const fullPath = assetPath(storageKey);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, input.bytes);
+  }
 
   const asset: Asset = {
     id,
@@ -163,6 +255,22 @@ export async function saveAsset(input: {
   });
 
   return asset;
+}
+
+export async function readAssetBytes(asset: Asset): Promise<Buffer> {
+  const config = supabaseConfig();
+  if (config) {
+    const response = await fetch(
+      `${config.url}/storage/v1/object/${encodeURIComponent(config.bucket)}/${encodeStorageKey(asset.storageKey)}`,
+      { headers: supabaseHeaders() }
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to read Supabase asset: ${response.status} ${await response.text()}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  return fs.readFile(assetPath(asset.storageKey));
 }
 
 export async function saveGeneratedSvg(userId: string, svg: string): Promise<Asset> {

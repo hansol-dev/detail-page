@@ -1,7 +1,6 @@
 ﻿import "server-only";
-import fs from "fs/promises";
 import sharp from "sharp";
-import { assetPath, createId, readDb, saveAsset, saveGeneratedSvg, timestamp, updateDb } from "../store";
+import { createId, readAssetBytes, readDb, saveAsset, saveGeneratedSvg, timestamp, updateDb } from "../store";
 import { getLatestApprovalMarkdown } from "./approval-md";
 import { getProductDraft } from "./product-drafts";
 import type { AppDb, Asset, AssetKind, BrandProfile, GeneratedCut, ImageGenerationJob, ProductDraft } from "../types";
@@ -248,7 +247,7 @@ function findReferenceAssets(
 
 async function assetDataUri(asset: Asset | null) {
   if (!asset) return null;
-  const bytes = await fs.readFile(assetPath(asset.storageKey));
+  const bytes = await readAssetBytes(asset);
   return `data:${asset.mimeType};base64,${bytes.toString("base64")}`;
 }
 
@@ -445,7 +444,7 @@ function imagePrompt(input: CutGenerationInput) {
 }
 
 async function appendAssetToForm(form: FormData, asset: Asset) {
-  const bytes = await fs.readFile(assetPath(asset.storageKey));
+  const bytes = await readAssetBytes(asset);
   const blob = new Blob([new Uint8Array(bytes)], { type: asset.mimeType || "application/octet-stream" });
   form.append("image[]", blob, asset.storageKey.split("/").at(-1) ?? `${asset.id}.png`);
 }
@@ -560,8 +559,8 @@ async function compositeBrandLogoOnCut(input: CutGenerationInput, asset: Asset) 
   if (!logoAsset || !shouldUseBrandLogoInCut(input)) return asset;
   if (asset.mimeType !== "image/png" || !canUseAsOpenAiReference(logoAsset)) return asset;
 
-  const baseBytes = await fs.readFile(assetPath(asset.storageKey));
-  const logoBytes = await fs.readFile(assetPath(logoAsset.storageKey));
+  const baseBytes = await readAssetBytes(asset);
+  const logoBytes = await readAssetBytes(logoAsset);
   const baseMeta = await sharp(baseBytes).metadata();
   if (!baseMeta.width || !baseMeta.height) return asset;
 
