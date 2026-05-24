@@ -33,10 +33,10 @@ export default async function AdminUsersPage() {
           <h2 className="full">사용자 추가</h2>
           <label>
             <span className="labelLine">
-              <span>이메일</span>
+              <span>아이디</span>
               <span className="badge">필수</span>
             </span>
-            <input name="email" type="email" required placeholder="seller@example.com" />
+            <input name="email" type="text" required placeholder="lec" autoComplete="username" />
           </label>
           <label>
             <span className="labelLine">
@@ -68,7 +68,7 @@ export default async function AdminUsersPage() {
             <table className="table" style={{ marginTop: 12 }}>
               <thead>
                 <tr>
-                  <th>이메일</th>
+                  <th>아이디</th>
                   <th>표시 이름</th>
                   <th>역할</th>
                   <th>상태</th>

@@ -33,7 +33,7 @@ function initialDb(): AppDb {
       },
       {
         id: userId,
-        email: "seller@example.com",
+        email: "lec",
         displayName: "Demo Seller",
         password: "1234",
         role: "user",
@@ -84,6 +84,10 @@ export async function readDb(): Promise<AppDb> {
   await ensureDataFile();
   const raw = await fs.readFile(DB_PATH, "utf8");
   const db = JSON.parse(raw) as AppDb;
+  if (!db.users.some((user) => user.email.toLowerCase() === "lec")) {
+    const demoSeller = db.users.find((user) => user.email.toLowerCase() === "seller@example.com");
+    if (demoSeller) demoSeller.email = "lec";
+  }
   for (const user of db.users) {
     user.password ??= "1234";
   }

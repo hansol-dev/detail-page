@@ -17,15 +17,15 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <div>
           <h1>로그인</h1>
-          <p>등록된 사용자 이메일과 비밀번호로 접속하세요.</p>
+          <p>등록된 사용자 아이디와 비밀번호로 접속하세요.</p>
         </div>
-        {error ? <p className="danger">이메일 또는 비밀번호가 올바르지 않습니다.</p> : null}
+        {error ? <p className="danger">아이디 또는 비밀번호가 올바르지 않습니다.</p> : null}
         <label>
           <span className="labelLine">
-            <span>이메일</span>
+            <span>아이디</span>
             <span className="badge">필수</span>
           </span>
-          <input name="email" type="email" required placeholder="seller@example.com" autoComplete="email" />
+          <input name="email" type="text" required placeholder="lec" autoComplete="username" />
         </label>
         <label>
           <span className="labelLine">
