@@ -16,6 +16,7 @@ import {
 } from "@/lib/services/approval-md";
 import { saveMdWorkspaceFile } from "@/lib/services/md-workspace";
 import {
+  processImageGenerationStep,
   regenerateCutImageForDraftCut,
   saveCutRevision,
   saveThumbnailRevision,
@@ -281,6 +282,15 @@ export async function startImageGenerationAction(formData: FormData) {
   const productDraftId = text(formData, "productDraftId");
   const job = await startImageGeneration(userId, productDraftId);
   redirect(`/detail-pages/${productDraftId}/review?jobId=${job.id}`);
+}
+
+export async function processImageGenerationStepAction(formData: FormData) {
+  const userId = await getCurrentUserId();
+  const productDraftId = text(formData, "productDraftId");
+  const jobId = text(formData, "jobId");
+  await processImageGenerationStep(userId, jobId);
+  revalidatePath(`/detail-pages/${productDraftId}/review?jobId=${jobId}`);
+  redirect(`/detail-pages/${productDraftId}/review?jobId=${jobId}`);
 }
 
 export async function saveCutRevisionAction(formData: FormData) {

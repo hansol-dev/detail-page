@@ -730,8 +730,6 @@ export async function startImageGeneration(userId: string, productDraftId: strin
   }
 
   const db = await readDb();
-  const brand = db.brands.find((item) => item.id === draft.brandProfileId);
-  const references = await buildImageReferences(db, userId, brand, draft);
   const expectedCutCount = extractCutCount(md.content);
   const ts = timestamp();
   const configuredProvider = process.env.OPENAI_API_KEY
@@ -757,81 +755,112 @@ export async function startImageGeneration(userId: string, productDraftId: strin
     if (target) target.status = "generating";
   });
 
-  try {
-    let actualProvider = configuredProvider;
+  return job;
+}
 
-    if (draft.thumbnailRequested) {
+export async function processImageGenerationStep(userId: string, jobId: string) {
+  const db = await readDb();
+  const job = db.imageGenerationJobs.find((item) => item.id === jobId);
+  if (!job) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
+  const draft = db.productDrafts.find((item) => item.id === job.productDraftId && item.userId === userId);
+  if (!draft) throw new Error("상품 초안을 찾을 수 없습니다.");
+  const md = db.approvalMarkdownVersions.find((item) => item.id === job.approvalMarkdownVersionId);
+  if (!md || md.status !== "approved") throw new Error("이미지 생성에는 승인된 최신 초안이 필요합니다.");
+  const brand = db.brands.find((item) => item.id === draft.brandProfileId);
+  const references = await buildImageReferences(db, userId, brand, draft);
+  const configuredProvider = process.env.OPENAI_API_KEY
+    ? process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"
+    : "dev-svg-provider";
+
+  try {
+    if (draft.thumbnailRequested && !draft.thumbnailAssetId) {
       const { asset, provider } = await generateThumbnailAsset({
         userId,
         productName: draft.productName,
         pointColor: brand?.pointColor ?? "#171717",
         references
       });
-      actualProvider = provider;
       await updateDb((nextDb) => {
-        const targetDraft = nextDb.productDrafts.find((item) => item.id === productDraftId);
+        const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
         if (targetDraft) targetDraft.thumbnailAssetId = asset.id;
+        const targetJob = nextDb.imageGenerationJobs.find((item) => item.id === job.id);
+        if (targetJob) targetJob.provider = provider;
+      });
+      return job;
+    }
+
+    const producedCutNumbers = new Set(
+      db.generatedCuts.filter((cut) => cut.imageGenerationJobId === job.id).map((cut) => cut.cutNumber)
+    );
+    const nextCutNumber = Array.from({ length: job.expectedCutCount }, (_, index) => index + 1).find(
+      (cutNumber) => !producedCutNumbers.has(cutNumber)
+    );
+
+    if (!nextCutNumber) {
+      return updateDb<ImageGenerationJob>((nextDb) => {
+        const targetJob = nextDb.imageGenerationJobs.find((item) => item.id === job.id);
+        if (!targetJob) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
+        targetJob.status = "succeeded";
+        targetJob.completedCutCount = targetJob.expectedCutCount;
+        targetJob.completedAt = timestamp();
+        const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
+        if (targetDraft) targetDraft.status = "generated";
+        return targetJob;
       });
     }
 
-    const cutNumbers = Array.from({ length: expectedCutCount }, (_, index) => index + 1);
-    const cutConcurrency = Math.max(1, Math.min(6, Number(process.env.OPENAI_CUT_CONCURRENCY || 3) || 3));
-
-    const cutResults = await mapWithConcurrency(cutNumbers, cutConcurrency, async (index) => {
-      const title = extractCutTitle(md.content, index);
-      const cutSection = extractCutSection(md.content, index);
-      const generationMarkdown = withCommonGenerationContext(md.content, cutSection);
-      const headline = fieldFromCutSection(cutSection, ["?ㅻ뱶?쇱씤"]) || draft.productName;
-      const subcopy = fieldFromCutSection(cutSection, ["?쒕툕移댄뵾", "?대?吏 ?쎌엯 臾멸뎄"]) || title;
-      const { asset, provider } = await generateCutAsset({
-        userId,
-        cutNumber: index,
-        title,
-        productName: draft.productName,
-        pointColor: brand?.pointColor ?? "#171717",
-        markdown: generationMarkdown,
-        references
-      });
-
-      const cut: GeneratedCut = {
-        id: createId("cut"),
-        imageGenerationJobId: job.id,
-        cutNumber: index,
-        title,
-        imageAssetId: asset.id,
-        approvedCopySnapshot: {
-          headline,
-          subcopy,
-          sourceMarkdownVersionId: md.id
-        },
-        status: "produced",
-        qa: {
-          textReadable: true,
-          koreanTextMatchesApprovedCopy: true,
-          productMatchesReference: Boolean(references.productPhotoAsset),
-          notes: [
-            ...(references.productPhotoAsset ? [] : ["?곹뭹 ?ъ쭊???놁뼱 肄섏뀎??珥덉븞?쇰줈 ?앹꽦?덉뒿?덈떎."]),
-            ...(references.logoAsset ? [] : ["釉뚮옖??濡쒓퀬媛 ?놁뼱 ?띿뒪??釉뚮옖?쒕챸 湲곗??쇰줈 ?앹꽦?덉뒿?덈떎."]),
-            ...(provider === "dev-svg-provider" ? ["OPENAI_API_KEY媛 ?놁뼱 ?뚯뒪???대?吏濡??앹꽦?덉뒿?덈떎."] : [])
-          ]
-        },
-        revisionRequest: null
-      };
-      return { cut, provider };
+    const title = extractCutTitle(md.content, nextCutNumber);
+    const cutSection = extractCutSection(md.content, nextCutNumber);
+    const generationMarkdown = withCommonGenerationContext(md.content, cutSection);
+    const headline = fieldFromCutSection(cutSection, ["헤드라인", "?ㅻ뱶?쇱씤"]) || draft.productName;
+    const subcopy = fieldFromCutSection(cutSection, ["서브카피", "?쒕툕移댄뵾", "이미지 삽입 문구", "?대?吏 ?쎌엯 臾멸뎄"]) || title;
+    const { asset, provider } = await generateCutAsset({
+      userId,
+      cutNumber: nextCutNumber,
+      title,
+      productName: draft.productName,
+      pointColor: brand?.pointColor ?? "#171717",
+      markdown: generationMarkdown,
+      references
     });
-    const cuts = cutResults.map((result) => result.cut);
-    actualProvider = cutResults.find((result) => result.provider !== configuredProvider)?.provider ?? cutResults.at(-1)?.provider ?? actualProvider;
+
+    const cut: GeneratedCut = {
+      id: createId("cut"),
+      imageGenerationJobId: job.id,
+      cutNumber: nextCutNumber,
+      title,
+      imageAssetId: asset.id,
+      approvedCopySnapshot: {
+        headline,
+        subcopy,
+        sourceMarkdownVersionId: md.id
+      },
+      status: "produced",
+      qa: {
+        textReadable: true,
+        koreanTextMatchesApprovedCopy: true,
+        productMatchesReference: Boolean(references.productPhotoAsset),
+        notes: [
+          ...(references.productPhotoAsset ? [] : ["상품 사진이 없어 컨셉 초안으로 생성했습니다."]),
+          ...(references.logoAsset ? [] : ["브랜드 로고가 없어 텍스트 브랜드명 기준으로 생성했습니다."]),
+          ...(provider === "dev-svg-provider" ? ["OPENAI_API_KEY가 없어 테스트 이미지로 생성했습니다."] : [])
+        ]
+      },
+      revisionRequest: null
+    };
 
     return updateDb<ImageGenerationJob>((nextDb) => {
-      nextDb.generatedCuts.push(...cuts.sort((a, b) => a.cutNumber - b.cutNumber));
+      nextDb.generatedCuts.push(cut);
       const targetJob = nextDb.imageGenerationJobs.find((item) => item.id === job.id);
-      if (!targetJob) throw new Error("?묒뾽??李얠쓣 ???놁뒿?덈떎.");
-      targetJob.status = "succeeded";
-      targetJob.provider = actualProvider;
-      targetJob.completedCutCount = cuts.length;
-      targetJob.completedAt = timestamp();
-      const targetDraft = nextDb.productDrafts.find((item) => item.id === productDraftId);
-      if (targetDraft) targetDraft.status = "generated";
+      if (!targetJob) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
+      targetJob.status = nextCutNumber >= targetJob.expectedCutCount ? "succeeded" : "running";
+      targetJob.provider = provider || configuredProvider;
+      targetJob.completedCutCount = Math.min(targetJob.expectedCutCount, targetJob.completedCutCount + 1);
+      if (targetJob.status === "succeeded") {
+        targetJob.completedAt = timestamp();
+        const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
+        if (targetDraft) targetDraft.status = "generated";
+      }
       return targetJob;
     });
   } catch (error) {
@@ -842,7 +871,7 @@ export async function startImageGeneration(userId: string, productDraftId: strin
         targetJob.errorMessage = error instanceof Error ? error.message : "Unknown image generation error";
         targetJob.completedAt = timestamp();
       }
-      const targetDraft = nextDb.productDrafts.find((item) => item.id === productDraftId);
+      const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
       if (targetDraft) targetDraft.status = "approved";
     });
     throw error;

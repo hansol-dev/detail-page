@@ -1,9 +1,11 @@
 import {
+  processImageGenerationStepAction,
   regenerateApprovalCutMarkdownAction,
   saveCutRevisionAction,
   saveThumbnailRevisionAction,
   startImageGenerationAction
 } from "@/app/actions";
+import { AutoImageGenerationStep } from "@/components/ux/AutoImageGenerationStep";
 import { CloseDetailsButton } from "@/components/ux/CloseDetailsButton";
 import { DownloadActions } from "@/components/ux/DownloadActions";
 import { FullDetailPreview } from "@/components/ux/FullDetailPreview";
@@ -162,6 +164,17 @@ export default async function ReviewPage({
               </p>
             </div>
             {readiness ? <ReadinessBadge readiness={readiness} /> : null}
+            {result.job.status === "running" ? (
+              <form
+                id={`image-step-${result.job.id}`}
+                action={processImageGenerationStepAction}
+                data-action-feedback="off"
+              >
+                <input type="hidden" name="productDraftId" value={result.draft.id} />
+                <input type="hidden" name="jobId" value={result.job.id} />
+                <AutoImageGenerationStep formId={`image-step-${result.job.id}`} />
+              </form>
+            ) : null}
             {result.job.status === "failed" ? (
               <form action={startImageGenerationAction} data-alert="이미지 생성을 다시 시작합니다." data-busy="이미지 생성 중입니다.">
                 <input type="hidden" name="productDraftId" value={result.draft.id} />
