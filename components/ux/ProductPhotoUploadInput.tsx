@@ -10,9 +10,11 @@ type PreviewPhoto = {
   url: string;
 };
 
-const MAX_PHOTO_DIMENSION = 1400;
 const TARGET_PHOTO_BYTES = 420 * 1024;
+const MAX_SUBMIT_PHOTO_BYTES = 1024 * 1024;
 const PHOTO_OUTPUT_TYPE = "image/jpeg";
+const RESIZE_STEPS = [1400, 1200, 1000, 800];
+const QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.44, 0.36];
 
 function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`;
@@ -46,39 +48,50 @@ function compressedFileName(name: string) {
   return name.replace(/\.[^.]+$/, "") + ".jpg";
 }
 
-async function compressImageFile(file: File) {
-  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") return file;
+async function compressImageFile(file: File): Promise<File | null> {
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
+    return file.size <= MAX_SUBMIT_PHOTO_BYTES ? file : null;
+  }
 
   try {
     const image = await loadImage(file);
-    const scale = Math.min(1, MAX_PHOTO_DIMENSION / image.naturalWidth, MAX_PHOTO_DIMENSION / image.naturalHeight);
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) return file;
+    let bestFile: File | null = file.size <= MAX_SUBMIT_PHOTO_BYTES ? file : null;
 
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, width, height);
-    context.drawImage(image, 0, 0, width, height);
+    for (const maxDimension of RESIZE_STEPS) {
+      const scale = Math.min(1, maxDimension / image.naturalWidth, maxDimension / image.naturalHeight);
+      const width = Math.max(1, Math.round(image.naturalWidth * scale));
+      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) continue;
 
-    for (const quality of [0.82, 0.72, 0.62, 0.52, 0.44]) {
-      const blob = await canvasToBlob(canvas, PHOTO_OUTPUT_TYPE, quality);
-      if (!blob) continue;
-      if (blob.size <= TARGET_PHOTO_BYTES || quality === 0.44) {
-        return new File([blob], compressedFileName(file.name), {
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+
+      for (const quality of QUALITY_STEPS) {
+        const blob = await canvasToBlob(canvas, PHOTO_OUTPUT_TYPE, quality);
+        if (!blob) continue;
+
+        const nextFile = new File([blob], compressedFileName(file.name), {
           type: PHOTO_OUTPUT_TYPE,
           lastModified: file.lastModified
         });
+        bestFile = nextFile;
+        if (blob.size <= TARGET_PHOTO_BYTES || blob.size <= MAX_SUBMIT_PHOTO_BYTES) {
+          return nextFile;
+        }
       }
     }
+
+    return bestFile;
   } catch {
-    return file;
+    return file.size <= MAX_SUBMIT_PHOTO_BYTES ? file : null;
   }
 
-  return file;
+  return null;
 }
 
 export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
@@ -87,6 +100,7 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
   const [previews, setPreviews] = useState<PreviewPhoto[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   useEffect(() => {
     previewsRef.current = previews;
@@ -122,6 +136,7 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
   }
 
   function clearPreviews() {
+    setUploadNotice(null);
     setOrderedPreviews((current) => {
       current.forEach((preview) => URL.revokeObjectURL(preview.url));
       return [];
@@ -144,8 +159,18 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
   async function handleFiles(files: File[]) {
     if (!files.length) return;
     setIsProcessing(true);
+    setUploadNotice(null);
+    syncInputFiles([]);
     try {
-      const compressedFiles = await Promise.all(files.map((file) => compressImageFile(file)));
+      const compressedFiles = (await Promise.all(files.map((file) => compressImageFile(file)))).filter(
+        (file): file is File => Boolean(file)
+      );
+      const skippedCount = files.length - compressedFiles.length;
+      if (skippedCount > 0) {
+        setUploadNotice(
+          `${skippedCount} photo(s) were skipped because the browser could not optimize them under the Vercel upload limit. Please retry as JPG or PNG.`
+        );
+      }
       setOrderedPreviews((current) => [
         ...current,
         ...compressedFiles.map((file, index) => ({
@@ -177,12 +202,13 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
       {previews.length ? (
         <>
           <div className="photoPreviewToolbar">
-            <span>{`선택된 새 사진 ${previews.length}개${isProcessing ? " · 최적화 중" : ""}`}</span>
+            <span>{`Selected photos ${previews.length}${isProcessing ? " · optimizing" : ""}`}</span>
             <button type="button" onClick={clearPreviews} disabled={disabled || isProcessing}>
-              전체삭제
+              Clear all
             </button>
           </div>
-          <div className="photoPreviewGrid" aria-label="선택한 상품 사진 미리보기. 드래그해서 순서를 바꿀 수 있습니다.">
+          {uploadNotice ? <p className="photoOrderHint danger">{uploadNotice}</p> : null}
+          <div className="photoPreviewGrid" aria-label="Selected product photo preview. Drag to reorder.">
             {previews.map((preview, index) => (
               <figure
                 className={`photoPreviewItem${draggingId === preview.id ? " dragging" : ""}`}
@@ -208,14 +234,14 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
                   setDraggingId(null);
                 }}
               >
-                <img src={preview.url} alt={`선택한 상품 사진 ${index + 1}`} />
+                <img src={preview.url} alt={`Selected product photo ${index + 1}`} />
                 <button
                   className="photoPreviewRemove"
                   type="button"
                   onClick={() => removePreview(preview.id)}
                   onDragStart={(event) => event.preventDefault()}
                   disabled={disabled || isProcessing}
-                  aria-label={`${preview.name} 삭제`}
+                  aria-label={`Remove ${preview.name}`}
                 >
                   x
                 </button>
@@ -227,14 +253,15 @@ export function ProductPhotoUploadInput({ disabled }: { disabled?: boolean }) {
               </figure>
             ))}
             <p className="photoOrderHint">
-              사진은 업로드 전에 자동으로 용량을 줄입니다. 드래그하면 바로 순서가 바뀌고, 이 순서대로 생성에 참고합니다.
+              Photos are optimized before upload. Drag to reorder; this order is used as generation reference.
             </p>
           </div>
         </>
       ) : (
-        <p className="muted">
-          {isProcessing ? "사진을 최적화하는 중입니다." : "사진을 선택하면 여기에서 바로 미리볼 수 있습니다."}
-        </p>
+        <>
+          <p className="muted">{isProcessing ? "Optimizing photos." : "Select photos to preview them here."}</p>
+          {uploadNotice ? <p className="photoOrderHint danger">{uploadNotice}</p> : null}
+        </>
       )}
     </div>
   );
