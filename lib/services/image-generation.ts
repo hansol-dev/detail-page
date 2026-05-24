@@ -917,6 +917,109 @@ export async function processImageGenerationStep(userId: string, jobId: string) 
   }
 }
 
+export async function processImageGenerationCut(userId: string, jobId: string, cutNumber: number) {
+  const db = await readDb();
+  const job = db.imageGenerationJobs.find((item) => item.id === jobId);
+  if (!job) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
+  if (cutNumber < 1 || cutNumber > job.expectedCutCount) throw new Error("생성할 컷 번호가 올바르지 않습니다.");
+  const draft = db.productDrafts.find((item) => item.id === job.productDraftId && item.userId === userId);
+  if (!draft) throw new Error("상품 초안을 찾을 수 없습니다.");
+  const md = db.approvalMarkdownVersions.find((item) => item.id === job.approvalMarkdownVersionId);
+  if (!md || md.status !== "approved") throw new Error("이미지 생성에는 승인된 최신 초안이 필요합니다.");
+  const existingCut = db.generatedCuts.find(
+    (item) => item.imageGenerationJobId === job.id && item.cutNumber === cutNumber && item.imageAssetId
+  );
+  if (existingCut) return job;
+
+  const brand = db.brands.find((item) => item.id === draft.brandProfileId);
+  const references = await buildImageReferences(db, userId, brand, draft);
+  const configuredProvider = process.env.OPENAI_API_KEY
+    ? process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"
+    : "dev-svg-provider";
+
+  try {
+    const title = extractCutTitle(md.content, cutNumber);
+    const cutSection = extractCutSection(md.content, cutNumber);
+    const generationMarkdown = withCommonGenerationContext(md.content, cutSection);
+    const headline = fieldFromCutSection(cutSection, ["헤드라인", "?ㅻ뱶?쇱씤"]) || draft.productName;
+    const subcopy = fieldFromCutSection(cutSection, ["서브카피", "?쒕툕移댄뵾", "이미지 삽입 문구", "?대?吏 ?쎌엯 臾멸뎄"]) || title;
+    const { asset, provider } = await generateCutAsset({
+      userId,
+      cutNumber,
+      title,
+      productName: draft.productName,
+      pointColor: brand?.pointColor ?? "#171717",
+      markdown: generationMarkdown,
+      references
+    });
+
+    const cut: GeneratedCut = {
+      id: createId("cut"),
+      imageGenerationJobId: job.id,
+      cutNumber,
+      title,
+      imageAssetId: asset.id,
+      approvedCopySnapshot: {
+        headline,
+        subcopy,
+        sourceMarkdownVersionId: md.id
+      },
+      status: "produced",
+      qa: {
+        textReadable: true,
+        koreanTextMatchesApprovedCopy: true,
+        productMatchesReference: references.productPhotoAssets.length > 0,
+        notes: [
+          ...(references.productPhotoAssets.length ? [] : ["상품 사진이 없어 컨셉 초안으로 생성했습니다."]),
+          ...(references.logoAsset ? [] : ["브랜드 로고가 없어 텍스트 브랜드명 기준으로 생성했습니다."]),
+          ...(provider === "dev-svg-provider" ? ["OPENAI_API_KEY가 없어 테스트 이미지로 생성했습니다."] : [])
+        ]
+      },
+      revisionRequest: null
+    };
+
+    return updateDb<ImageGenerationJob>((nextDb) => {
+      const existingIndex = nextDb.generatedCuts.findIndex(
+        (item) => item.imageGenerationJobId === job.id && item.cutNumber === cutNumber
+      );
+      if (existingIndex >= 0) {
+        nextDb.generatedCuts[existingIndex] = { ...nextDb.generatedCuts[existingIndex], ...cut };
+      } else {
+        nextDb.generatedCuts.push(cut);
+      }
+
+      const targetJob = nextDb.imageGenerationJobs.find((item) => item.id === job.id);
+      if (!targetJob) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
+      const completedCutNumbers = new Set(
+        nextDb.generatedCuts
+          .filter((item) => item.imageGenerationJobId === job.id && item.imageAssetId && item.status === "produced")
+          .map((item) => item.cutNumber)
+      );
+      targetJob.provider = provider || configuredProvider;
+      targetJob.completedCutCount = Math.min(targetJob.expectedCutCount, completedCutNumbers.size);
+      targetJob.status = targetJob.completedCutCount >= targetJob.expectedCutCount ? "succeeded" : "running";
+      if (targetJob.status === "succeeded") {
+        targetJob.completedAt = timestamp();
+        const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
+        if (targetDraft) targetDraft.status = "generated";
+      }
+      return targetJob;
+    });
+  } catch (error) {
+    await updateDb((nextDb) => {
+      const targetJob = nextDb.imageGenerationJobs.find((item) => item.id === job.id);
+      if (targetJob) {
+        targetJob.status = "failed";
+        targetJob.errorMessage = error instanceof Error ? error.message : "Unknown image generation error";
+        targetJob.completedAt = timestamp();
+      }
+      const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
+      if (targetDraft) targetDraft.status = "approved";
+    });
+    throw error;
+  }
+}
+
 export async function listJobsForDraft(userId: string, productDraftId: string) {
   const draft = await getProductDraft(userId, productDraftId);
   if (!draft) return [];

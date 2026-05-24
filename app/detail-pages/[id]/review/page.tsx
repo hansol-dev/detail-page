@@ -61,6 +61,17 @@ export default async function ReviewPage({
           assets: db.assets
         })
       : null;
+  const completedCutNumbers = new Set(
+    result?.cuts
+      .filter((cut) => cut.imageAssetId && cut.status === "produced")
+      .map((cut) => cut.cutNumber) ?? []
+  );
+  const pendingCutNumbers = result
+    ? Array.from({ length: result.job.expectedCutCount }, (_, index) => index + 1).filter(
+        (cutNumber) => !completedCutNumbers.has(cutNumber)
+      )
+    : [];
+  const thumbnailPending = result ? result.draft.thumbnailRequested && !result.draft.thumbnailAssetId : false;
 
   return (
     <>
@@ -172,7 +183,12 @@ export default async function ReviewPage({
               >
                 <input type="hidden" name="productDraftId" value={result.draft.id} />
                 <input type="hidden" name="jobId" value={result.job.id} />
-                <AutoImageGenerationStep formId={`image-step-${result.job.id}`} />
+                <AutoImageGenerationStep
+                  formId={`image-step-${result.job.id}`}
+                  jobId={result.job.id}
+                  pendingCutNumbers={pendingCutNumbers}
+                  thumbnailPending={thumbnailPending}
+                />
               </form>
             ) : null}
             {result.job.status === "failed" ? (

@@ -1,6 +1,7 @@
 import {
   approveAndRegenerateDraftCutImageAction,
   approveMarkdownAction,
+  deleteApprovalCutMarkdownAction,
   regenerateApprovalCutMarkdownAction,
   saveDraftCutSectionAction
 } from "@/app/actions";
@@ -131,6 +132,18 @@ export function DraftReviewCards({
                     <input type="hidden" name="productDraftId" value={summary.markdown.productDraftId} />
                     <input type="hidden" name="cutNumber" value={cut.cutNumber} />
                     <button type="submit">이 컷 초안 다시 만들기</button>
+                  </form>
+                  <form
+                    action={deleteApprovalCutMarkdownAction}
+                    data-alert={`Cut ${String(cut.cutNumber).padStart(2, "0")} 초안을 삭제합니다. 삭제하면 이 컷은 이미지 생성에서 제외됩니다.`}
+                    data-busy={`Cut ${String(cut.cutNumber).padStart(2, "0")} 삭제 중입니다.`}
+                  >
+                    <input type="hidden" name="markdownId" value={summary.markdown.id} />
+                    <input type="hidden" name="productDraftId" value={summary.markdown.productDraftId} />
+                    <input type="hidden" name="cutNumber" value={cut.cutNumber} />
+                    <button className="dangerButton" type="submit" disabled={!editable || summary.cuts.length <= 1}>
+                      컷 삭제
+                    </button>
                   </form>
                 </div>
               </div>

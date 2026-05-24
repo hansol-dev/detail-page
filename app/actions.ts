@@ -9,6 +9,7 @@ import { archiveBrand, createBrand, updateBrand } from "@/lib/services/brands";
 import { createProductDraft, updateProductDraft } from "@/lib/services/product-drafts";
 import {
   approveMarkdown,
+  deleteApprovalCutMarkdown,
   generateApprovalMarkdown,
   getApprovalMarkdown,
   regenerateApprovalCutMarkdown,
@@ -217,6 +218,16 @@ export async function regenerateApprovalCutMarkdownAction(formData: FormData) {
   const productDraftId = text(formData, "productDraftId");
   const cutNumber = Number(text(formData, "cutNumber"));
   await regenerateApprovalCutMarkdown(userId, markdownId, cutNumber);
+  revalidatePath(`/detail-pages/${productDraftId}/approval`);
+  redirect(`/detail-pages/${productDraftId}/approval`);
+}
+
+export async function deleteApprovalCutMarkdownAction(formData: FormData) {
+  const userId = await getCurrentUserId();
+  const markdownId = text(formData, "markdownId");
+  const productDraftId = text(formData, "productDraftId");
+  const cutNumber = Number(text(formData, "cutNumber"));
+  await deleteApprovalCutMarkdown(userId, markdownId, cutNumber);
   revalidatePath(`/detail-pages/${productDraftId}/approval`);
   redirect(`/detail-pages/${productDraftId}/approval`);
 }

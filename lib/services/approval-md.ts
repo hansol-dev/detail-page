@@ -656,6 +656,54 @@ function updateEmbeddedPlanJson(content: string, cut: DetailPagePlanCut) {
   }
 }
 
+function removeCutFromEmbeddedPlanJson(content: string, cutNumber: number) {
+  const match = content.match(/```json\r?\n([\s\S]*?)\r?\n```/);
+  if (!match?.[1] || match.index === undefined) return content;
+
+  try {
+    const parsed = JSON.parse(match[1]) as DetailPagePlanJson;
+    if (!Array.isArray(parsed.cuts)) return content;
+    parsed.cuts = parsed.cuts
+      .filter((item) => Number(item.cutNumber) !== cutNumber)
+      .map((item, index) => ({ ...item, cutNumber: index + 1 }));
+    const nextBlock = `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+    return `${content.slice(0, match.index)}${nextBlock}${content.slice(match.index + match[0].length)}`;
+  } catch {
+    return content;
+  }
+}
+
+function removeCutSectionContent(content: string, cutNumber: number) {
+  const matches = [...content.matchAll(/^### Cut\s+(\d+)\.\s*(.+)$/gm)];
+  const targetIndex = matches.findIndex((match) => Number(match[1]) === cutNumber);
+  if (targetIndex < 0) throw new Error("삭제할 컷 초안을 찾을 수 없습니다.");
+  if (matches.length <= 1) throw new Error("상세페이지에는 최소 1개 컷이 필요합니다.");
+
+  const target = matches[targetIndex];
+  const start = target.index ?? 0;
+  const end = matches[targetIndex + 1]?.index ?? content.length;
+  return `${content.slice(0, start)}${content.slice(end).trimStart()}`;
+}
+
+function renumberCutSections(content: string) {
+  let nextCutNumber = 0;
+  return content.replace(/^### Cut\s+\d+\.\s*(.+)$/gm, (_match, title: string) => {
+    nextCutNumber += 1;
+    return `### Cut ${String(nextCutNumber).padStart(2, "0")}. ${title.trim()}`;
+  });
+}
+
+function countCutSections(content: string) {
+  return [...content.matchAll(/^### Cut\s+\d+\.\s*(.+)$/gm)].length;
+}
+
+function updateActualPlannedCuts(content: string, count: number) {
+  if (/actualPlannedCuts:\s*\d+/.test(content)) {
+    return content.replace(/actualPlannedCuts:\s*\d+/, `actualPlannedCuts: ${count}`);
+  }
+  return content;
+}
+
 function contentWithRegeneratedCut(content: string, plan: DetailPagePlanJson, brand: BrandProfile, cutNumber: number) {
   const cut = plan.cuts.find((item) => Number(item.cutNumber) === cutNumber);
   if (!cut) throw new Error("다시 만들 컷 초안을 찾을 수 없습니다.");
@@ -843,6 +891,35 @@ export async function regenerateApprovalCutMarkdown(userId: string, markdownId: 
       targetDraft.updatedAt = ts;
     }
     return current;
+  });
+}
+
+export async function deleteApprovalCutMarkdown(userId: string, markdownId: string, cutNumber: number) {
+  const existing = await getApprovalMarkdown(userId, markdownId);
+  if (!existing) throw new Error("초안을 찾을 수 없습니다.");
+  if (existing.status === "approved") throw new Error("승인된 초안에서는 컷을 삭제할 수 없습니다.");
+
+  const withoutCut = removeCutSectionContent(existing.content, cutNumber);
+  const renumbered = renumberCutSections(removeCutFromEmbeddedPlanJson(withoutCut, cutNumber));
+  const nextCutCount = countCutSections(renumbered);
+  const nextContent = updateActualPlannedCuts(renumbered, nextCutCount);
+  const ts = timestamp();
+
+  return updateDb<ApprovalMarkdownVersion>((db) => {
+    const md = db.approvalMarkdownVersions.find((item) => item.id === markdownId);
+    if (!md) throw new Error("초안을 찾을 수 없습니다.");
+    md.content = nextContent;
+    md.generatedFrom = {
+      ...(typeof md.generatedFrom === "object" && md.generatedFrom ? md.generatedFrom : {}),
+      deletedCutNumber: cutNumber,
+      deletedAt: ts
+    };
+    const draft = db.productDrafts.find((item) => item.id === md.productDraftId);
+    if (draft) {
+      draft.cutCount = nextCutCount;
+      draft.updatedAt = ts;
+    }
+    return md;
   });
 }
 
