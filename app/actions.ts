@@ -148,25 +148,33 @@ export async function deleteBrandAction(formData: FormData) {
 
 export async function createProductDraftAction(formData: FormData) {
   const userId = await getCurrentUserId();
-  const draft = await createProductDraft(userId, {
-    brandProfileId: text(formData, "brandProfileId"),
-    productName: text(formData, "productName"),
-    category: text(formData, "category"),
-    salesChannel: text(formData, "salesChannel") || undefined,
-    targetCustomer: text(formData, "targetCustomer") || undefined,
-    sellingPoints: text(formData, "sellingPoints") || undefined,
-    facts: text(formData, "facts") || undefined,
-    requiredPhrases: text(formData, "requiredPhrases") || undefined,
-    forbiddenPhrases: text(formData, "forbiddenPhrases") || undefined,
-    shippingNotice: textareaText(formData, "shippingNotice") || undefined,
-    returnExchangeNotice: textareaText(formData, "returnExchangeNotice") || undefined,
-    customNotices: notices(formData),
-    cutCount: Number(text(formData, "cutCount") || 6),
-    photos: files(formData, "photos"),
-    thumbnailRequested: formData.get("thumbnailRequested") === "on"
-  });
-  await generateApprovalMarkdown(userId, draft.id);
-  redirect(`/detail-pages/${draft.id}/approval`);
+  let draftId: string | null = null;
+  try {
+    const draft = await createProductDraft(userId, {
+      brandProfileId: text(formData, "brandProfileId"),
+      productName: text(formData, "productName"),
+      category: text(formData, "category"),
+      salesChannel: text(formData, "salesChannel") || undefined,
+      targetCustomer: text(formData, "targetCustomer") || undefined,
+      sellingPoints: text(formData, "sellingPoints") || undefined,
+      facts: text(formData, "facts") || undefined,
+      requiredPhrases: text(formData, "requiredPhrases") || undefined,
+      forbiddenPhrases: text(formData, "forbiddenPhrases") || undefined,
+      shippingNotice: textareaText(formData, "shippingNotice") || undefined,
+      returnExchangeNotice: textareaText(formData, "returnExchangeNotice") || undefined,
+      customNotices: notices(formData),
+      cutCount: Number(text(formData, "cutCount") || 6),
+      photos: files(formData, "photos"),
+      thumbnailRequested: formData.get("thumbnailRequested") === "on"
+    });
+    draftId = draft.id;
+    await generateApprovalMarkdown(userId, draft.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "상세페이지 초안 생성 중 오류가 발생했습니다.";
+    redirect(`/detail-pages/new?error=${encodeURIComponent(message.slice(0, 180))}`);
+  }
+  if (!draftId) redirect("/detail-pages/new?error=상세페이지%20초안%20생성에%20실패했습니다.");
+  redirect(`/detail-pages/${draftId}/approval`);
 }
 
 export async function updateProductDraftAction(formData: FormData) {

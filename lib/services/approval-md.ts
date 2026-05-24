@@ -521,8 +521,10 @@ async function generatePlanJsonWithAi(draft: ProductDraft, brand: BrandProfile, 
   if (!apiKey) return null;
 
   const model = process.env.OPENAI_TEXT_MODEL || "gpt-4.1-mini";
+  const timeoutMs = Math.max(1000, Number(process.env.OPENAI_TEXT_TIMEOUT_MS || 12000) || 12000);
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"

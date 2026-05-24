@@ -19,7 +19,8 @@ function meta(name: string) {
   return field;
 }
 
-export default async function NewDetailPage() {
+export default async function NewDetailPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   const userId = await getCurrentUserId();
   const db = await readDb();
   const brands = await listBrands(userId);
@@ -30,7 +31,7 @@ export default async function NewDetailPage() {
       <header className="pageHeader">
         <div>
           <h1>상세페이지 생성</h1>
-          <p>필수값부터 입력하고, 선택값은 브랜드 기본값이나 확인 필요 항목으로 처리합니다.</p>
+          <p>필수값을 입력하고, 선택값은 브랜드 기본값이랑 확인 필요한 항목으로 처리합니다.</p>
         </div>
         <Link className="button" href="/brands">
           브랜드 관리
@@ -45,6 +46,7 @@ export default async function NewDetailPage() {
           data-busy="상세페이지 초안 생성 중입니다."
         >
           <h2 className="full">상품 입력</h2>
+          {error ? <p className="full danger">{error}</p> : null}
           {disabled ? <p className="full danger">먼저 브랜드를 1개 이상 등록해야 합니다.</p> : null}
 
           <ProductFormSection title="기본 정보" description="초안 생성에 꼭 필요한 값입니다.">
@@ -106,7 +108,7 @@ export default async function NewDetailPage() {
             </label>
           </ProductFormSection>
 
-          <ProductFormSection title="판매 포인트" description="비워두면 초안에서 확인 필요 항목으로 표시합니다.">
+          <ProductFormSection title="판매 포인트" description="비워두면 초안에서 확인 필요한 항목으로 표시합니다.">
             <label className="full">
               <ImportanceFieldLabel field={meta("sellingPoints")} />
               <textarea name="sellingPoints" disabled={disabled} />
@@ -121,7 +123,7 @@ export default async function NewDetailPage() {
             </label>
           </ProductFormSection>
 
-          <ProductFormSection title="안내사항" description="상품별 입력이 있으면 브랜드 기본값보다 우선 적용합니다.">
+          <ProductFormSection title="안내사항" description="상품별 입력값이 있으면 브랜드 기본값보다 우선 적용합니다.">
             <label className="full">
               <ImportanceFieldLabel field={meta("shippingNotice")} />
               <textarea name="shippingNotice" disabled={disabled} />
