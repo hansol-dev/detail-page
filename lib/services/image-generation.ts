@@ -111,9 +111,10 @@ function productPhotoReplacementGuidance(references: ImageReferences) {
     references.productPhotoAssets.length > 1
       ? `- Also use the other uploaded product photos as secondary references (${references.productPhotoAssets.length} total) so the cut does not ignore alternate angles, package sides, contents, or product variants.`
       : "",
-    "- Do not copy the selected photo literally as a flat pasted image unless the existing cut composition already calls for that treatment.",
+    "- Do not paste, crop, or reuse the selected photo literally as an unchanged flat image.",
+    "- Recreate the product as a polished ecommerce visual inside the current cut, using the uploaded photo only as reference for identity and factual visual details.",
     "- Keep the cut's designed composition, lighting, scale, background, typography, and approved copy as much as possible.",
-    "- The regenerated product should feel designed into the current detail-page cut while staying faithful to the selected reference photo.",
+    "- The regenerated product should feel newly designed into the current detail-page cut while staying faithful to the selected reference photo.",
     "- Do not invent a different product, package, label, ingredient, logo, option, or flavor that conflicts with the selected photo."
   ]
     .filter(Boolean)
@@ -303,12 +304,12 @@ function referenceSummary(references: ImageReferences, options: { logoAllowed?: 
   return [
     references.productPhotoAsset && references.productPhotoOverride
       ? productPhotoCount > 1
-        ? `Use the selected uploaded product photo as the primary visual reference. Also inspect the other uploaded product photos (${productPhotoCount} total) as secondary references for package angle, label details, contents, color, and scale. Do not paste any photo literally unless appropriate.`
-        : "Use the selected uploaded product photo as a visual reference to correct product identity and visible details, while preserving the designed composition of the cut. Do not paste it literally unless appropriate."
+        ? `Use the selected uploaded product photo as the primary visual reference. Also inspect the other uploaded product photos (${productPhotoCount} total) as secondary references for package angle, label details, contents, color, and scale. Do not paste, crop, or reuse any uploaded photo literally as an unchanged image.`
+        : "Use the selected uploaded product photo as a visual reference to correct product identity and visible details, while preserving the designed composition of the cut. Do not paste, crop, or reuse it literally as an unchanged image."
       : references.productPhotoAsset
         ? productPhotoCount > 1
-          ? `Use all ${productPhotoCount} uploaded product photos as visual references. Cross-check front/back/side package shape, label wording, color, contents, scale, and product variants. Do not rely only on the first photo.`
-          : "Use the uploaded product photo as the primary product reference. Preserve the actual product shape, color, packaging, and visible label details as much as possible."
+          ? `Use all ${productPhotoCount} uploaded product photos as visual references. Cross-check front/back/side package shape, label wording, color, contents, scale, and product variants. Do not rely only on the first photo, and do not paste uploaded photos literally into the final design.`
+          : "Use the uploaded product photo as the primary product reference for identity, shape, color, packaging, and visible label details. Recreate it as a polished ecommerce detail-page visual instead of pasting the original photo unchanged."
       : "No product photo was provided; create a conservative product presentation without inventing factual claims.",
     references.logoAsset && options.logoAllowed
       ? "This cut is allowed to use the brand logo. Do not draw, recreate, crop, or stylize it inside the AI image. Leave clean whitespace near the top center for the app to place the uploaded original logo file after generation."
@@ -448,6 +449,9 @@ function imagePrompt(input: CutGenerationInput) {
     referenceSummary(input.references, { logoAllowed }),
     input.references.productPhotoAssets.length > 1
       ? "Multiple product photos were uploaded. Use every provided product-photo reference to understand front/back/side views, label wording, package shape, product contents, colors, scale, and option differences. Do not ignore later photos or base the cut only on the first uploaded image. If photos show alternate angles of the same product, merge that knowledge into one faithful product depiction; do not create conflicting extra products unless the approved cut asks for a lineup."
+      : "",
+    input.references.productPhotoAsset
+      ? "Uploaded product photos are references, not final design assets. Build a new sales-ready detail-page scene around the product: improve lighting, background, angle, scale, shadows, composition, and integration with typography. Do not leave the product looking like a raw uploaded photo pasted onto the page."
       : "",
     mandatoryPhotoGuidance,
     revisionGuidance,
@@ -667,8 +671,8 @@ function thumbnailPrompt(input: {
     `Brand point color: ${input.pointColor}`,
     referenceSummary(input.references, { logoAllowed: false }),
     input.references.productPhotoAssets.length > 1
-      ? "Use all uploaded product photos as visual references for the thumbnail. Pick the clearest hero angle, but cross-check every uploaded image for package identity, color, label, and contents."
-      : "Use the uploaded product photo as the main visual when available.",
+      ? "Use all uploaded product photos as visual references for the thumbnail. Pick the clearest hero angle, but cross-check every uploaded image for package identity, color, label, and contents. Recreate a polished marketplace thumbnail instead of pasting the raw photo unchanged."
+      : "Use the uploaded product photo as the main reference when available. Recreate a polished marketplace thumbnail instead of pasting the raw photo unchanged.",
     "Keep the product large and centered with enough margin for marketplace cropping.",
     "Use minimal Korean text only if it is clearly readable. Do not create claims, certifications, review counts, discount rates, or unverifiable facts.",
     "Do not make it look like a full detail-page section. It should work as a single product listing thumbnail.",
