@@ -1,8 +1,7 @@
 import {
-  approveMarkdownAction,
+  approveAndStartImageGenerationAction,
   regenerateApprovalMarkdownAction,
-  saveApprovalMarkdownAction,
-  startImageGenerationAction
+  saveApprovalMarkdownAction
 } from "@/app/actions";
 import Link from "next/link";
 import { AdvancedMarkdownEditor } from "@/components/ux/AdvancedMarkdownEditor";
@@ -150,25 +149,19 @@ export default async function ApprovalPage({ params }: { params: Promise<{ id: s
                 <p className="muted">로고와 상품 이미지를 추가하면 생성 결과가 더 정확해집니다.</p>
               )}
               <div className="actions actionColumn">
-                <form action={approveMarkdownAction} data-alert="상세페이지 초안을 승인합니다. 승인 후 이미지 생성을 진행할 수 있습니다.">
+                <form
+                  action={approveAndStartImageGenerationAction}
+                  data-alert="초안을 승인하고 바로 이미지 생성을 시작합니다."
+                  data-busy="초안 승인 및 이미지 생성 준비 중입니다."
+                >
                   <input type="hidden" name="markdownId" value={md.id} />
                   <input type="hidden" name="productDraftId" value={draft.id} />
-                  <button className="primary" type="submit" disabled={md.status === "approved"}>
-                    {userFacingTerms.approveDraft}
-                  </button>
-                </form>
-                <form
-                  action={startImageGenerationAction}
-                  data-alert="이미지 생성을 시작합니다."
-                  data-busy="이미지 생성 중입니다."
-                >
-                  <input type="hidden" name="productDraftId" value={draft.id} />
-                  <button type="submit" disabled={md.status !== "approved"}>
-                    {userFacingTerms.generateImage}
+                  <button className="primary" type="submit">
+                    초안승인 및 이미지생성
                   </button>
                 </form>
               </div>
-              {md.status !== "approved" ? <p className="muted">이미지 생성 전 초안 승인이 필요합니다.</p> : null}
+              <p className="muted">버튼을 누르면 현재 초안을 승인한 뒤 상세페이지 이미지 생성을 바로 시작합니다.</p>
             </aside>
           </section>
           <AdvancedMarkdownEditor>

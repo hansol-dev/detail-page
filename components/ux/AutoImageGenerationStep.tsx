@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function AutoImageGenerationStep({
@@ -18,6 +18,8 @@ export function AutoImageGenerationStep({
 }) {
   const router = useRouter();
   const submittedRef = useRef(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const pendingKey = useMemo(() => pendingCutNumbers.join(","), [pendingCutNumbers]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -40,7 +42,9 @@ export function AutoImageGenerationStep({
             }
           })
         )
-          .catch(() => undefined)
+          .catch((error) => {
+            setErrorMessage(error instanceof Error ? error.message : "이미지 병렬 생성 중 오류가 발생했습니다.");
+          })
           .finally(() => router.refresh());
         return;
       }
@@ -51,11 +55,14 @@ export function AutoImageGenerationStep({
       }
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [concurrency, formId, jobId, pendingCutNumbers, router, thumbnailPending]);
+  }, [concurrency, formId, jobId, pendingCutNumbers, pendingKey, router, thumbnailPending]);
 
   return (
-    <button className="primary" type="submit">
-      {jobId && !thumbnailPending && pendingCutNumbers.length ? "남은 컷 병렬 생성" : "다음 이미지 생성"}
-    </button>
+    <>
+      <button className="primary" type="submit">
+        {jobId && !thumbnailPending && pendingCutNumbers.length ? "남은 컷 병렬 생성" : "다음 이미지 생성"}
+      </button>
+      {errorMessage ? <p className="danger">{errorMessage}</p> : null}
+    </>
   );
 }

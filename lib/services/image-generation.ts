@@ -137,10 +137,16 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item
 }
 
 function extractCutCount(markdown: string) {
+  const headings = markdown.match(/^### Cut\s+\d+/gm);
+  if (headings?.length) return headings.length;
   const count = markdown.match(/actualPlannedCuts:\s*(\d+)/)?.[1];
   if (count) return Number(count);
-  const headings = markdown.match(/^### Cut\s+\d+/gm);
-  return headings?.length || 6;
+  return 6;
+}
+
+function extractCutNumbers(markdown: string) {
+  const matches = [...markdown.matchAll(/^### Cut\s+(\d+)\./gm)].map((match) => Number(match[1]));
+  return matches.length ? matches : Array.from({ length: extractCutCount(markdown) }, (_, index) => index + 1);
 }
 
 function extractCutTitle(markdown: string, cutNumber: number) {
@@ -828,12 +834,11 @@ export async function processImageGenerationStep(userId: string, jobId: string) 
       return job;
     }
 
+    const plannedCutNumbers = extractCutNumbers(md.content);
     const producedCutNumbers = new Set(
       db.generatedCuts.filter((cut) => cut.imageGenerationJobId === job.id).map((cut) => cut.cutNumber)
     );
-    const nextCutNumber = Array.from({ length: job.expectedCutCount }, (_, index) => index + 1).find(
-      (cutNumber) => !producedCutNumbers.has(cutNumber)
-    );
+    const nextCutNumber = plannedCutNumbers.find((cutNumber) => !producedCutNumbers.has(cutNumber));
 
     if (!nextCutNumber) {
       return updateDb<ImageGenerationJob>((nextDb) => {
@@ -892,9 +897,16 @@ export async function processImageGenerationStep(userId: string, jobId: string) 
       nextDb.generatedCuts.push(cut);
       const targetJob = nextDb.imageGenerationJobs.find((item) => item.id === job.id);
       if (!targetJob) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
-      targetJob.status = nextCutNumber >= targetJob.expectedCutCount ? "succeeded" : "running";
+      const completedCutNumbers = new Set(
+        nextDb.generatedCuts
+          .filter((item) => item.imageGenerationJobId === job.id && item.imageAssetId && item.status === "produced")
+          .map((item) => item.cutNumber)
+      );
+      const allPlannedCutsProduced = plannedCutNumbers.every((cutNumber) => completedCutNumbers.has(cutNumber));
+      targetJob.expectedCutCount = plannedCutNumbers.length;
+      targetJob.status = allPlannedCutsProduced ? "succeeded" : "running";
       targetJob.provider = provider || configuredProvider;
-      targetJob.completedCutCount = Math.min(targetJob.expectedCutCount, targetJob.completedCutCount + 1);
+      targetJob.completedCutCount = plannedCutNumbers.filter((cutNumber) => completedCutNumbers.has(cutNumber)).length;
       if (targetJob.status === "succeeded") {
         targetJob.completedAt = timestamp();
         const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);
@@ -921,11 +933,12 @@ export async function processImageGenerationCut(userId: string, jobId: string, c
   const db = await readDb();
   const job = db.imageGenerationJobs.find((item) => item.id === jobId);
   if (!job) throw new Error("이미지 생성 작업을 찾을 수 없습니다.");
-  if (cutNumber < 1 || cutNumber > job.expectedCutCount) throw new Error("생성할 컷 번호가 올바르지 않습니다.");
   const draft = db.productDrafts.find((item) => item.id === job.productDraftId && item.userId === userId);
   if (!draft) throw new Error("상품 초안을 찾을 수 없습니다.");
   const md = db.approvalMarkdownVersions.find((item) => item.id === job.approvalMarkdownVersionId);
   if (!md || md.status !== "approved") throw new Error("이미지 생성에는 승인된 최신 초안이 필요합니다.");
+  const plannedCutNumbers = extractCutNumbers(md.content);
+  if (!plannedCutNumbers.includes(cutNumber)) throw new Error("생성할 컷 번호가 승인된 초안에 없습니다.");
   const existingCut = db.generatedCuts.find(
     (item) => item.imageGenerationJobId === job.id && item.cutNumber === cutNumber && item.imageAssetId
   );
@@ -995,9 +1008,15 @@ export async function processImageGenerationCut(userId: string, jobId: string, c
           .filter((item) => item.imageGenerationJobId === job.id && item.imageAssetId && item.status === "produced")
           .map((item) => item.cutNumber)
       );
+      const allPlannedCutsProduced = plannedCutNumbers.every((plannedCutNumber) =>
+        completedCutNumbers.has(plannedCutNumber)
+      );
       targetJob.provider = provider || configuredProvider;
-      targetJob.completedCutCount = Math.min(targetJob.expectedCutCount, completedCutNumbers.size);
-      targetJob.status = targetJob.completedCutCount >= targetJob.expectedCutCount ? "succeeded" : "running";
+      targetJob.expectedCutCount = plannedCutNumbers.length;
+      targetJob.completedCutCount = plannedCutNumbers.filter((plannedCutNumber) =>
+        completedCutNumbers.has(plannedCutNumber)
+      ).length;
+      targetJob.status = allPlannedCutsProduced ? "succeeded" : "running";
       if (targetJob.status === "succeeded") {
         targetJob.completedAt = timestamp();
         const targetDraft = nextDb.productDrafts.find((item) => item.id === job.productDraftId);

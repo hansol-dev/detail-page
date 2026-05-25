@@ -276,6 +276,16 @@ export async function approveMarkdownAction(formData: FormData) {
   revalidatePath(`/detail-pages/${productDraftId}/approval`);
 }
 
+export async function approveAndStartImageGenerationAction(formData: FormData) {
+  const userId = await getCurrentUserId();
+  const markdownId = text(formData, "markdownId");
+  const productDraftId = text(formData, "productDraftId");
+  await approveMarkdown(userId, markdownId);
+  const job = await startImageGeneration(userId, productDraftId);
+  revalidatePath(`/detail-pages/${productDraftId}/approval`);
+  redirect(`/detail-pages/${productDraftId}/review?jobId=${job.id}`);
+}
+
 export async function approveAndRegenerateDraftCutImageAction(formData: FormData) {
   const userId = await getCurrentUserId();
   const markdownId = text(formData, "markdownId");

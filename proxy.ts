@@ -12,7 +12,8 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/api/health") ||
-    pathname.startsWith("/api/assets");
+    pathname.startsWith("/api/assets") ||
+    pathname.startsWith("/api/image-jobs");
 
   const hasSession = Boolean(request.cookies.get("detail_user_id")?.value);
 

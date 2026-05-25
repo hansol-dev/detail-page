@@ -51,6 +51,14 @@ export default async function ReviewPage({
   const downloadableThumbnail = result
     ? buildDownloadableThumbnail({ productName: result.draft.productName, asset: thumbnailAsset })
     : null;
+  const approvedMarkdown = result
+    ? db.approvalMarkdownVersions.find((item) => item.id === result.job.approvalMarkdownVersionId)
+    : null;
+  const approvedCutNumbers =
+    approvedMarkdown?.content.match(/^### Cut\s+(\d+)\./gm)?.map((heading) => {
+      const match = heading.match(/^### Cut\s+(\d+)\./);
+      return match ? Number(match[1]) : null;
+    }).filter((cutNumber): cutNumber is number => Boolean(cutNumber)) ?? [];
   const readiness =
     result && brand
       ? buildGenerationReadiness({
@@ -67,9 +75,10 @@ export default async function ReviewPage({
       .map((cut) => cut.cutNumber) ?? []
   );
   const pendingCutNumbers = result
-    ? Array.from({ length: result.job.expectedCutCount }, (_, index) => index + 1).filter(
-        (cutNumber) => !completedCutNumbers.has(cutNumber)
-      )
+    ? (approvedCutNumbers.length
+        ? approvedCutNumbers
+        : Array.from({ length: result.job.expectedCutCount }, (_, index) => index + 1)
+      ).filter((cutNumber) => !completedCutNumbers.has(cutNumber))
     : [];
   const thumbnailPending = result ? result.draft.thumbnailRequested && !result.draft.thumbnailAssetId : false;
 
